@@ -1,0 +1,1 @@
+node --test tests/alltest.js
