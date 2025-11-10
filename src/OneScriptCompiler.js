@@ -89,6 +89,7 @@ export class OSCompiler {
 
   visitBinary_expression(node) {
     const children = node.children; // ← ОБЯЗАТЕЛЬНО .children, не .namedChildren
+    const childerString = children.toString();
 
     // Случай скобок: ( expr )
     if (children.length === 3 && children[0].text === '(' && children[2].text === ')') {
@@ -96,22 +97,25 @@ export class OSCompiler {
       return;
     }
 
-    // Бинарная операция должна иметь ровно 3 потомка: левый, оператор, правый
-    if (children.length !== 3) {
-      console.error('Узел:', node.toString());
-      console.error('Дети (все):', children.map(c => ({
-        type: c.type,
-        text: c.text
-      })));
-      throw new Error(`Ожидалось 3 ребёнка в binary_expression, получено: ${children.length}`);
+    var opText = '';
+    var left = null;
+    var right = null;
+    var opNode = null;
+    if (children.length == 3) {
+        [left, opNode, right] = children;
+        opText = opNode.text.trim();
+    }
+    else if(children.length == 2){
+        [left, right] = children;
+        // Грамматика не определяет и\или, поэтому наколхозим тут
+        const opPartLength = node.text.length - left.text.length - right.text.length;
+        opText = node.text.substring(left.text.length, left.text.length + opPartLength).trim();
     }
 
-    const [left, opNode, right] = children;
+    
 
     this.visit(left);
     this.visit(right);
-
-    const opText = opNode.text.trim();
 
     switch (opText) {
       case '+': this.instructions.push({ op: Op.ADD }); break;
@@ -140,18 +144,18 @@ export class OSCompiler {
     visitIf_statement(node) {
         const named = node.namedChildren; // только значимые узлы
 
-        console.log('if_statement namedChildren:', named.map(n => n.type));
+        // console.log('if_statement namedChildren:', named.map(n => n.type));
 
-        const condition_log = named[0];
-        console.log('Условие type:', condition_log.type);
-        console.log('Условие text:', condition_log.text);
-        console.log('Условие children:', condition_log.children.length);
-        console.log('Условие children детально:', condition_log.children.map((c, i) => ({
-          index: i,
-          type: c.type,
-          text: c.text,
-          isNamed: c.isNamed
-        })));
+        // const condition_log = named[0];
+        // console.log('Условие type:', condition_log.type);
+        // console.log('Условие text:', condition_log.text);
+        // console.log('Условие children:', condition_log.children.length);
+        // console.log('Условие children детально:', condition_log.children.map((c, i) => ({
+        //   index: i,
+        //   type: c.type,
+        //   text: c.text,
+        //   isNamed: c.isNamed
+        // })));
 
         if (named.length < 2) {
             throw new Error("Ожидалось: условие и тело");

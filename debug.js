@@ -35,12 +35,14 @@ function walk(node, depth = 0) {
 
   const source = 
   `
-  б = 1;
-  а = 1;
-  в = 0;
-  Если а = 1 И б = 1 Тогда
+  Если 1 = 1 И 2 = 2 И 3 = 3 Тогда
       в = 1
   КонецЕсли;;
+  `;
+
+  const source2 = 
+  `
+  а=1 + 1;
   `;
   await OS.Run(source);
   const variables = OS.DumpVariables();
