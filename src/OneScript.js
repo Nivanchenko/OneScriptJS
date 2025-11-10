@@ -45,9 +45,9 @@ export class OSCompiler {
   }
 
   visit(node) {
-    console.log('Обрабатываем узел ' + node);
+    // console.log('Обрабатываем узел ' + node);
     const method = `visit${this.capitalize(node.type)}`;
-    console.log('Обрабатываем метод ' + method);
+    // console.log('Обрабатываем метод ' + method);
     if (typeof this[method] === 'function') {
       return this[method](node);
     }
@@ -107,18 +107,25 @@ export class OSCompiler {
   }
 
   visitBinary_expression(node) {
-    const children = node.children; // важно: .children, не .namedChildren
-    if (children.length < 3) {
-      // Это может быть скобка: ( expr )
-      if (children.length === 1 && children[0].type === '_expression') {
-        return this.visit(children[0]);
-      }
-      throw new Error(`Некорректный binary_expression: ${node.toString()}`);
+    const children = node.children; // ← ОБЯЗАТЕЛЬНО .children, не .namedChildren
+
+    // Случай скобок: ( expr )
+    if (children.length === 3 && children[0].text === '(' && children[2].text === ')') {
+      this.visit(children[1]);
+      return;
     }
 
-    const left = children[0];
-    const opNode = children[1];
-    const right = children[2];
+    // Бинарная операция должна иметь ровно 3 потомка: левый, оператор, правый
+    if (children.length !== 3) {
+      console.error('Узел:', node.toString());
+      console.error('Дети (все):', children.map(c => ({
+        type: c.type,
+        text: c.text
+      })));
+      throw new Error(`Ожидалось 3 ребёнка в binary_expression, получено: ${children.length}`);
+    }
+
+    const [left, opNode, right] = children;
 
     this.visit(left);
     this.visit(right);
@@ -139,18 +146,31 @@ export class OSCompiler {
       case '>': this.instructions.push({ op: Op.GT }); break;
       case '>=': this.instructions.push({ op: Op.GE }); break;
 
-      case 'И': 
+      case 'И':
       case 'and': this.instructions.push({ op: Op.AND }); break;
       case 'ИЛИ': 
       case 'or': this.instructions.push({ op: Op.OR }); break;
 
       default:
-        throw new Error(`Неизвестный бинарный оператор: "${opText}"`);
+        throw new Error(`Неизвестный оператор: "${opText}"`);
     }
   }
 
     visitIf_statement(node) {
         const named = node.namedChildren; // только значимые узлы
+
+        console.log('if_statement namedChildren:', named.map(n => n.type));
+
+        const condition_log = named[0];
+        console.log('Условие type:', condition_log.type);
+        console.log('Условие text:', condition_log.text);
+        console.log('Условие children:', condition_log.children.length);
+        console.log('Условие children детально:', condition_log.children.map((c, i) => ({
+          index: i,
+          type: c.type,
+          text: c.text,
+          isNamed: c.isNamed
+        })));
 
         if (named.length < 2) {
             throw new Error("Ожидалось: условие и тело");

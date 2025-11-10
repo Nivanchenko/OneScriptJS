@@ -1,4 +1,4 @@
-import OSparser from './src/osparser.js';
+import { OSparser } from './src/main.js';
 
 function walk(node, depth = 0) {
   const indent = '  '.repeat(depth);
@@ -10,7 +10,7 @@ function walk(node, depth = 0) {
 
 (async () => {
 
-  const parser = new OSparser();
+  const parser = new OSparser('wasm/tree-sitter-onescript.wasm');
 
   const source = 
   `
