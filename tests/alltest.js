@@ -1,33 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 
-import { OSparser , OSMachine , OSCompiler } from '../src/main.js';
+import { OneScript } from '../src/main.js';
 
-async function getTree(source) {
-    var parser = new OSparser('./wasm/tree-sitter-onescript.wasm');
-    var tree = await parser.Parse(source);
-    return tree
-}
-
-function runCode(source, tree){
-    const compiler = new OSCompiler(source);
-    const ir = compiler.compile(tree.rootNode);
-
-    const vm = new OSMachine();
-    vm.run(ir);
-
-    return vm;
+function getOneScript(){
+    return new OneScript('./wasm/tree-sitter-onescript.wasm');
 }
 
 test('template', async () => {
 
     // Given
+    // const OS = getOneScript();
     // const source = 
     // `
     // `;
-    // const tree = await getTree(source);
+    
     // When 
-    // const vm = runCode(source);
+    // await OS.Run(source);
+    // const variables = OS.DumpVariables();
 
     // Then
 
@@ -36,6 +26,7 @@ test('template', async () => {
 test('Simple parse', async () => {
     
     // Given
+    const OS = getOneScript();
     const source = 
     `
     Перем а; 
@@ -43,7 +34,8 @@ test('Simple parse', async () => {
     `;
 
     // When 
-    const tree = await getTree(source);
+    
+    const tree = await OS.GetTree(source);
 
     // Then
     assert.equal(tree.rootNode.children[0].text, "Перем а;")
@@ -51,25 +43,69 @@ test('Simple parse', async () => {
        
 });
 
-test('String and Number vars', async () => {
+test('load and run', async () => {
 
     // Given
+    const OS = getOneScript();
     const source = 
     `
     Перем а; 
     а = 1;
     б = "1";
     `;
-    const tree = await getTree(source);
-    // When 
-    const vm = runCode(source, tree);
-    const variables = vm.dumpVariables();
-    // const compiler = new OSCompiler(source);
-    // const ir = compiler.compile(tree.rootNode);
 
-    // const vm = new OSMachine();
-    // vm.run(ir);
-    // const variables = vm.dumpVariables();
+    // When 
+    await OS.AddSource(source);
+    await OS.Run();
+    const variables = OS.DumpVariables();
+
+    // Then
+    assert.equal(variables['а'], 1);
+    assert.equal(variables['б'], '"1"');
+
+});
+
+test('double load and run', async () => {
+
+    // Given
+    const OS = getOneScript();
+
+    const source = 
+    `
+    а = 1;
+    `;
+
+    const source2 = 
+    `
+    б = "1";
+    `;
+
+    // When 
+    await OS.AddSource(source);
+    await OS.AddSource(source2);
+    await OS.Run();
+    const variables = OS.DumpVariables();
+
+    // Then
+    assert.equal(variables['а'], 1);
+    assert.equal(variables['б'], '"1"');
+
+});
+
+test('String and Number vars', async () => {
+
+    // Given
+    const OS = getOneScript();
+    const source = 
+    `
+    Перем а; 
+    а = 1;
+    б = "1";
+    `;
+
+    // When 
+    await OS.Run(source);
+    const variables = OS.DumpVariables();
 
     // Then
     assert.equal(variables['а'], 1);
@@ -80,6 +116,7 @@ test('String and Number vars', async () => {
 test('math assingn',async () => {
     
     // Given
+    const OS = getOneScript();
     const source = 
     `
     a = 1 + 1;
@@ -88,10 +125,10 @@ test('math assingn',async () => {
     d = 6 / 2;
     f = 1 + 2 * 2 - 8 / 2;
     `;
-    const tree = await getTree(source);
+
     // When 
-    const vm = runCode(source, tree);
-    const variables = vm.dumpVariables();
+    await OS.Run(source);
+    const variables = OS.DumpVariables();
 
     // Then
     assert.equal(variables['a'], 2);
@@ -105,16 +142,17 @@ test('math assingn',async () => {
 test('math ret val',async () => {
     
     // Given
+    const OS = getOneScript();
     const source = 
     `
     a = 1 + 1;
     b = 2 - 1;
     c = a + b;
     `;
-    const tree = await getTree(source);
+    
     // When 
-    const vm = runCode(source, tree);
-    const variables = vm.dumpVariables();
+    await OS.Run(source);
+    const variables = OS.DumpVariables();
 
     // Then
     assert.equal(variables['c'], 3);
@@ -124,6 +162,7 @@ test('math ret val',async () => {
 test('if >',async () => {
     
     // Given
+    const OS = getOneScript();
     const source = 
     `
     б = 0;
@@ -131,10 +170,10 @@ test('if >',async () => {
     Если а > 0 Тогда
         б = 1
     КонецЕсли;`;
-    const tree = await getTree(source);
+    
     // When 
-    const vm = runCode(source, tree);
-    const variables = vm.dumpVariables();
+    await OS.Run(source);
+    const variables = OS.DumpVariables();
 
     // Then
     assert.equal(variables['б'], 1);
@@ -144,6 +183,7 @@ test('if >',async () => {
 test('if >=',async () => {
     
     // Given
+    const OS = getOneScript();
     const source = 
     `
     б = 0;
@@ -151,10 +191,10 @@ test('if >=',async () => {
     Если а >= 2 Тогда
         б = 1
     КонецЕсли;`;
-    const tree = await getTree(source);
+    
     // When 
-    const vm = runCode(source, tree);
-    const variables = vm.dumpVariables();
+    await OS.Run(source);
+    const variables = OS.DumpVariables();
 
     // Then
     assert.equal(variables['б'], 1);
@@ -164,6 +204,7 @@ test('if >=',async () => {
 test('if >=',async () => {
     
     // Given
+    const OS = getOneScript();
     const source = 
     `
     б = 0;
@@ -171,10 +212,10 @@ test('if >=',async () => {
     Если а >= 2 Тогда
         б = 1
     КонецЕсли;`;
-    const tree = await getTree(source);
+    
     // When 
-    const vm = runCode(source, tree);
-    const variables = vm.dumpVariables();
+    await OS.Run(source);
+    const variables = OS.DumpVariables();
 
     // Then
     assert.equal(variables['б'], 1);
@@ -184,6 +225,7 @@ test('if >=',async () => {
 test('if =',async () => {
     
     // Given
+    const OS = getOneScript();
     const source = 
     `
     б = 0;
@@ -191,10 +233,10 @@ test('if =',async () => {
     Если а = 1 Тогда
         б = 1
     КонецЕсли;`;
-    const tree = await getTree(source);
+    
     // When 
-    const vm = runCode(source, tree);
-    const variables = vm.dumpVariables();
+    await OS.Run(source);
+    const variables = OS.DumpVariables();
 
     // Then
     assert.equal(variables['б'], 1);
@@ -204,6 +246,7 @@ test('if =',async () => {
 test('if <',async () => {
     
     // Given
+    const OS = getOneScript();
     const source = 
     `
     б = 0;
@@ -211,10 +254,10 @@ test('if <',async () => {
     Если а < 2 Тогда
         б = 1
     КонецЕсли;`;
-    const tree = await getTree(source);
+    
     // When 
-    const vm = runCode(source, tree);
-    const variables = vm.dumpVariables();
+    await OS.Run(source);
+    const variables = OS.DumpVariables();
 
     // Then
     assert.equal(variables['б'], 1);
@@ -224,6 +267,7 @@ test('if <',async () => {
 test('if <=',async () => {
     
     // Given
+    const OS = getOneScript();
     const source = 
     `
     б = 0;
@@ -231,10 +275,10 @@ test('if <=',async () => {
     Если а <= 2 Тогда
         б = 1
     КонецЕсли;`;
-    const tree = await getTree(source);
+    
     // When 
-    const vm = runCode(source, tree);
-    const variables = vm.dumpVariables();
+    await OS.Run(source);
+    const variables = OS.DumpVariables();
 
     // Then
     assert.equal(variables['б'], 1);
@@ -244,6 +288,7 @@ test('if <=',async () => {
 test('if <=',async () => {
     
     // Given
+    const OS = getOneScript();
     const source = 
     `
     б = 0;
@@ -251,10 +296,10 @@ test('if <=',async () => {
     Если а <= 2 Тогда
         б = 1
     КонецЕсли;`;
-    const tree = await getTree(source);
+    
     // When 
-    const vm = runCode(source, tree);
-    const variables = vm.dumpVariables();
+    await OS.Run(source);
+    const variables = OS.DumpVariables();
 
     // Then
     assert.equal(variables['б'], 1);
@@ -264,6 +309,7 @@ test('if <=',async () => {
 test('if and',async () => {
     
     // Given
+    const OS = getOneScript();
     const source = 
     `
     б = 1;
@@ -272,10 +318,10 @@ test('if and',async () => {
     Если а = 1 И б = 1 Тогда
         в = 1
     КонецЕсли;`;
-    const tree = await getTree(source);
+    
     // When 
-    const vm = runCode(source, tree);
-    const variables = vm.dumpVariables();
+    await OS.Run(source);
+    const variables = OS.DumpVariables();
 
     // Then
     assert.equal(variables['в'], 1);
