@@ -269,7 +269,7 @@ test('if and',async () => {
     б = 1;
     а = 1;
     в = 0;
-    Если а = 1 B б = 1 Тогда
+    Если а = 1 И б = 1 Тогда
         в = 1
     КонецЕсли;`;
     const tree = await getTree(source);
