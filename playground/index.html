@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>JOScript playground</title>
+</head>
+<body>
+    <button onclick="window.PrintAST()">Print AST</button> <button onclick="window.RunOScript()">Run</button><br>
+    <textarea id="listing" rows="30" cols="70" placeholder="Enter your code here...">
+        Перем б;
+        а = 3;
+        б = а + 3;
+        Если б > 6 Тогда
+            ц = а * б;
+        КонецЕсли;
+    </textarea>
+    <textarea id="result" rows="30" cols="60" placeholder="Result here..."></textarea><br>
+
+    <script type="module">
+    import { OSparser } from './main.js'; // после сборки
+    import { OSMachine } from './main.js'; // после сборки
+    import { OSCompiler } from './main.js'; // после сборки
+
+    window.PrintAST = async () => {
+        const parser = new OSparser();
+        const tree = await parser.Parse(document.getElementById('listing').value);
+        const code = walk(tree.rootNode);
+        document.getElementById('result').value = code.join('\n');
+    };
+
+    window.RunOScript = async () => {
+        const source = document.getElementById('listing').value;
+
+        const parser = new OSparser();
+        const tree = await parser.Parse(source);
+
+        const compiler = new OSCompiler(source);
+        const ir = compiler.compile(tree.rootNode);
+
+        const vm = new OSMachine();
+        vm.run(ir);
+
+        document.getElementById('result').value = JSON.stringify(vm.dumpVariables(), null, 2);
+    };
+
+    function walk(node, output = [], depth = 0) {
+        const indent = '  '.repeat(depth);
+        output.push(`${indent}${node.type}: "${node.text}"`);
+        for (const child of node.namedChildren) {
+            walk(child, output, depth + 1);
+        }
+        return output;
+    }
+  </script>
+
+</body>
+</html>

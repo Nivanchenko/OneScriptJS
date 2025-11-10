@@ -1,0 +1,11 @@
+{
+  "type": "module",
+  "dependencies": {
+    "browserify": "^17.0.1",
+    "express": "^5.1.0",
+    "web-tree-sitter": "^0.25.10"
+  },
+  "devDependencies": {
+    "vite": "^7.2.2"
+  }
+}
