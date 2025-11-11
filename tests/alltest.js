@@ -243,6 +243,27 @@ test('if =',async () => {
 
 });
 
+test('if = strings',async () => {
+    
+    // Given
+    const OS = getOneScript();
+    const source = 
+    `
+    б = 0;
+    а = "string";
+    Если а = "string" Тогда
+        б = 1
+    КонецЕсли;`;
+    
+    // When 
+    await OS.Run(source);
+    const variables = OS.DumpVariables();
+
+    // Then
+    assert.equal(variables['б'], 1);
+
+});
+
 test('if <',async () => {
     
     // Given
