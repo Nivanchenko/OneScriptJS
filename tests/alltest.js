@@ -372,6 +372,27 @@ test('if or',async () => {
 
 });
 
+test('if noteq',async () => {
+    
+    // Given
+    const OS = getOneScript();
+    const source = 
+    `
+    а = 1;
+    в = 0;
+    Если а <> 0 Тогда
+        в = 1
+    КонецЕсли;`;
+    
+    // When 
+    await OS.Run(source);
+    const variables = OS.DumpVariables();
+
+    // Then
+    assert.equal(variables['в'], 1);
+
+});
+
 test('if not',async () => {
     
     // Given
