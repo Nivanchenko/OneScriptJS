@@ -1,0 +1,36 @@
+{
+  "grammars": [
+    {
+      "name": "onescript",
+      "camelcase": "OneScript",
+      "scope": "source.onescript",
+      "file-types": [
+        ".os"
+      ],
+      "injection-regex": "^onescript$"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "OneScript language",
+    "authors": [
+      {
+        "name": "Gukov Viktor",
+        "email": "zchokobo@gmail.com",
+        "url": "https://github.com/EightM"
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/EightM/tree-sitter-onescript"
+    }
+  },
+  "bindings": {
+    "c": true,
+    "go": true,
+    "node": true,
+    "python": true,
+    "rust": true,
+    "swift": true
+  }
+}
