@@ -1,4 +1,4 @@
-export const Op = {
+const Op = {
   // Переменные
     PUSH: 'PUSH',        
     LOAD: 'LOAD',        
@@ -26,4 +26,7 @@ export const Op = {
     JUMP: 'JUMP',                   
     LABEL: 'LABEL',   
                 
-};
+} as const;
+
+export type Op = typeof Op[keyof typeof Op];
+export { Op };
