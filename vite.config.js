@@ -4,16 +4,25 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   build: {
     lib: {
-      entry: 'src/main.js',
-      name: 'JOSParser',
+      entry: './build/js/main.js',
+      name: 'OneScriptJS',
       fileName: 'main',
-      formats: ['es'] // только ES-модуль для браузера
+      formats: ['es'] 
     },
     outDir: 'public',
     sourcemap: true,
     rollupOptions: {
-      external: [], // ничего не внешнее
+      external: [], 
     }
   },
-  publicDir: './wasm' // откуда брать WASM
+  test: {
+    include: ['tests/**/*.test.ts'],
+    exclude: ['node_modules'],
+    environment: 'node',
+    globals: true,
+    setupFiles: [],
+    testTimeout: 10000,
+    hookTimeout: 10000,
+  },
+  publicDir: './wasm' 
 });

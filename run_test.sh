@@ -1,1 +1,1 @@
-node --test tests/alltest.js
+npm run test:run
