@@ -21,6 +21,7 @@ const Op = {
     AND: 'AND',
     OR: 'OR',
     NOT: 'NOT',
+    NEG: 'NEG',
   // Условия
     JUMP_IF_FALSE: 'JUMP_IF_FALSE', 
     JUMP: 'JUMP',                   

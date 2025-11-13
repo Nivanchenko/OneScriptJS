@@ -230,4 +230,38 @@ export class OSCompiler {
 
         this.instructions.push(new Instruction(Op.LABEL, endLabel));
     }
+
+    visitUnary_expression(node: Node) {
+        // У унарного выражения два дочерних узла: оператор и выражение
+        // node.child(0) - оператор ("не", "-", "+")
+        // node.child(1) - выражение ($._expression)
+        const operatorNode = node.child(0);
+        const expressionNode = node.child(1);
+
+        if (!operatorNode || !expressionNode) {
+            throw new Error(`Некорректное unary_expression: ${node.toString()}`);
+        }
+
+        // Компилируем подвыражение
+        this.visit(expressionNode);
+
+        // Определяем оператор
+        const opText = operatorNode.text.trim().toLowerCase();
+
+        switch (opText) {
+        case 'не':
+        case 'not':
+            this.instructions.push(new Instruction(Op.NOT));
+            break;
+        case '-':
+            this.instructions.push(new Instruction(Op.NEG));
+            break;
+        case '+':
+            // Унарный плюс: не изменяет значение
+            break;
+        default:
+            throw new Error(`Неизвестный унарный оператор: "${opText}"`);
+        }
+    }
+    
 }
