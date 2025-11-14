@@ -182,6 +182,25 @@ export class OSMachine {
           // ничего не делаем — метки уже разрешены
           break;
 
+        case Op.NOT:
+          const NOTvalue = this.stack.pop();
+          if (NOTvalue === undefined) {
+            throw new Error('Stack underflow in NOT operation');
+          }
+          this.stack.push(!NOTvalue);
+          break;
+
+        case Op.NEG:
+          const NEGnum = this.stack.pop();
+          if (NEGnum === undefined) {
+            throw new Error('Stack underflow in NEG operation');
+          }
+          if (typeof NEGnum !== 'number') {
+            throw new Error(`Cannot apply unary minus to non-number: ${typeof NEGnum}`);
+          }
+          this.stack.push(-NEGnum);
+          break;
+
         default:
           throw new Error(`Неизвестная инструкция: ${instr.code}`);
       }

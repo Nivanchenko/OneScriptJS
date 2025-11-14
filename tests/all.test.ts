@@ -328,6 +328,27 @@ describe('OneScript', () => {
         expect(vars['в']).toBe(1);
     });
 
+    it('if and (2)', async () => {
+
+        // Given
+        const source = 
+        `
+        б = 1;
+        а = 1;
+        в = 0;
+        Если а = 1 И б = 1 и в = 0 Тогда
+            в = 1
+        КонецЕсли;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['в']).toBe(1);
+    });
+
     it('if or', async () => {
 
         // Given
@@ -336,7 +357,7 @@ describe('OneScript', () => {
         б = 1;
         а = 1;
         в = 0;
-        Если а = 1 ИЛИ б = 0 Тогда
+        Если а = 1 или б = 0 Тогда
             в = 1
         КонецЕсли;
         `;
@@ -391,6 +412,73 @@ describe('OneScript', () => {
         expect(vars['в']).toBe(1);
     });
 
+    it('if or (4)', async () => {
+
+        // Given
+        const source = 
+        `
+        б = 1;
+        а = 1;
+        в = 0;
+        Если а = 2 ИЛИ б = 3 Тогда
+            в = 1
+        КонецЕсли;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['в']).toBe(0);
+    });
+
+    it('if else', async () => {
+
+        // Given
+        const source = 
+        `
+        б = 1;
+        а = 1;
+        в = 0;
+        Если а = 2 Тогда
+            в = 2
+        Иначе
+            в = 1
+        КонецЕсли;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['в']).toBe(2);
+    });
+
+    it('if else (2)', async () => {
+
+        // Given
+        const source = 
+        `
+        б = 1;
+        а = 1;
+        в = 0;
+        Если а = 1 Тогда
+            в = 2
+        Иначе
+            в = 1
+        КонецЕсли;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['в']).toBe(2);
+    });
+
     it('if noteq', async () => {
 
         // Given
@@ -429,6 +517,74 @@ describe('OneScript', () => {
 
         // Then
         expect(vars['в']).toBe(1);
+    });
+
+    it('if unar (not)', async () => {
+
+        // Given
+        const source = 
+        `
+        а = 1;
+        в = 0;
+        Если не (а = 0) Тогда
+            в = 1
+        КонецЕсли;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['в']).toBe(1);
+    });
+
+    it('if unar minus', async () => {
+
+        // Given
+        const source = 
+        `
+        а = - 1;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['а']).toBe(-1);
+    });
+
+    it('if unar minus 2', async () => {
+
+        // Given
+        const source = 
+        `
+        а = - 2 + 1;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['а']).toBe(-1);
+    });
+
+    it('if unar minus 3', async () => {
+
+        // Given
+        const source = 
+        `
+        а = - (2 + 1);
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['а']).toBe(-3);
     });
 
 });

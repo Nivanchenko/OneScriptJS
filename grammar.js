@@ -307,7 +307,13 @@ module.exports = grammar({
         choice(
           seq("-", $._expression),
           seq("+", $._expression),
-          seq(new RustRegex("(?iu)(not|не)"), $._expression)
+          seq("не", $._expression),
+          seq("Не", $._expression),
+          seq("нЕ", $._expression),
+          seq("НЕ", $._expression),
+          seq("not", $._expression),
+          seq("Not", $._expression),
+          seq("NOT", $._expression)  
         )
       ),
 
@@ -325,14 +331,19 @@ module.exports = grammar({
         prec.left(PREC.RELATIONAL, seq($._expression, ">=", $._expression)),
         prec.left(PREC.RELATIONAL, seq($._expression, ">", $._expression)),
         prec.left(PREC.RELATIONAL, seq($._expression, "<>", $._expression)),
-        prec.left(
-          PREC.LOGICAL_AND,
-          seq($._expression, new RustRegex("(?iu)(and|и)"), $._expression)
-        ),
-        prec.left(
-          PREC.LOGICAL_OR,
-          seq($._expression, new RustRegex("(?iu)(or|или)"), $._expression)
-        )
+        prec.left(PREC.LOGICAL_AND, seq($._expression, "и", $._expression)),
+        prec.left(PREC.LOGICAL_AND, seq($._expression, "И", $._expression)),
+        prec.left(PREC.LOGICAL_AND, seq($._expression, "Или", $._expression)), 
+        prec.left(PREC.LOGICAL_AND, seq($._expression, "иЛи", $._expression)), 
+        prec.left(PREC.LOGICAL_AND, seq($._expression, "AND", $._expression)),
+        prec.left(PREC.LOGICAL_AND, seq($._expression, "and", $._expression)),
+        prec.left(PREC.LOGICAL_AND, seq($._expression, "And", $._expression)), 
+        prec.left(PREC.LOGICAL_OR, seq($._expression, "ИЛИ", $._expression)),
+        prec.left(PREC.LOGICAL_OR, seq($._expression, "или", $._expression)),
+        prec.left(PREC.LOGICAL_OR, seq($._expression, "ИлИ", $._expression)), 
+        prec.left(PREC.LOGICAL_OR, seq($._expression, "OR", $._expression)),
+        prec.left(PREC.LOGICAL_OR, seq($._expression, "or", $._expression)),
+        prec.left(PREC.LOGICAL_OR, seq($._expression, "Or", $._expression))  
       ),
 
     number: (_) =>

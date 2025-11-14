@@ -136,21 +136,9 @@ export class OSCompiler {
             }
             
             [left, opNode, right] = [child0, child1, child2];
-            opText = opNode.text.trim();
-        } else if (children.length === 2) {
-            const [child0, child1] = children;
-            
-            if (!child0 || !child1) {
-            throw new Error('Some children are null in 2-child binary expression');
-            }
-            
-            [left, right] = [child0, child1];
-
-            // Грамматика не определяет И/ИЛИ, поэтому "наколхозим" тут
-            const opPartLength = node.text.length - left.text.length - right.text.length;
-            opText = node.text.substring(left.text.length, left.text.length + opPartLength).trim();
+            opText = opNode.text.trim().toUpperCase();
         } else {
-            throw new Error(`Unexpected number of children in binary expression: ${children.length}`);
+            throw new Error(`Unexpected number of children in binary expression: ${children.length} ${node.toString()}`);
         }
 
         if (!left || !right) {
@@ -175,9 +163,9 @@ export class OSCompiler {
             case '>=': this.instructions.push(new Instruction(Op.GE)); break;
 
             case 'И':
-            case 'and': this.instructions.push(new Instruction(Op.AND)); break;
+            case 'AND': this.instructions.push(new Instruction(Op.AND)); break;
             case 'ИЛИ':
-            case 'or': this.instructions.push(new Instruction(Op.OR)); break;
+            case 'OR': this.instructions.push(new Instruction(Op.OR)); break;
 
             default:
             throw new Error(`Неизвестный оператор: "${opText}"`);
@@ -232,36 +220,35 @@ export class OSCompiler {
     }
 
     visitUnary_expression(node: Node) {
-        // У унарного выражения два дочерних узла: оператор и выражение
-        // node.child(0) - оператор ("не", "-", "+")
-        // node.child(1) - выражение ($._expression)
-        const operatorNode = node.child(0);
-        const expressionNode = node.child(1);
+        // node.type === "unary_expression"
+        // node.children.length === 2
+        const operatorNode = node.child(0);      // ← это "не"
+        const expressionNode = node.child(1);    // ← это "member_access (identifier)"
 
         if (!operatorNode || !expressionNode) {
             throw new Error(`Некорректное unary_expression: ${node.toString()}`);
         }
 
-        // Компилируем подвыражение
+        // Компилируем выражение после "не"
         this.visit(expressionNode);
 
         // Определяем оператор
         const opText = operatorNode.text.trim().toLowerCase();
 
         switch (opText) {
-        case 'не':
-        case 'not':
+            case 'не':
+            case 'not':
             this.instructions.push(new Instruction(Op.NOT));
             break;
-        case '-':
+            case '-':
             this.instructions.push(new Instruction(Op.NEG));
             break;
-        case '+':
+            case '+':
             // Унарный плюс: не изменяет значение
             break;
-        default:
+            default:
             throw new Error(`Неизвестный унарный оператор: "${opText}"`);
         }
-    }
+        }
     
 }
