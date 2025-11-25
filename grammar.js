@@ -27,7 +27,12 @@ module.exports = grammar({
   extras: ($) => [/\s|\r?\n/, $._comment, $._preprocessor_directive],
 
   word: ($) => $.identifier,
-  conflicts: ($) => [[$.module_var_block]],
+  conflicts: ($) => [
+    [$.module_var_block], 
+    [$.primary_expression, $._const_value],
+    [$.member_access, $.primary_expression],
+    [$.primary_expression, $._expression]
+  ],
 
   rules: {
     source_file: ($) =>
@@ -246,11 +251,13 @@ module.exports = grammar({
       ),
     _expression: ($) =>
       choice(
-        $.unary_expression,
-        $.binary_expression,
-        $.member_access,
+        $.unary_expression,         // ← унарное самое высокое
+        $.binary_expression,       // ← арифметические
+        $.relational_expression,    // ← сравнения
+        $.logical_and_expression,   // ← логическое И
+        $.logical_or_expression,    // ← логическое ИЛИ
+        $.primary_expression,       // ← базовое
         $.ternary_operator,
-        $.new_operator,
         $._const_value
       ),
 
@@ -301,6 +308,46 @@ module.exports = grammar({
         seq(optional($._expression), repeat1(seq(",", optional($._expression))))
       ),
 
+    primary_expression: ($) =>
+      choice(
+        $.identifier,
+        $._const_value,
+        $.method_call,
+        $.member_access,
+        $.new_operator,
+        seq("(", $._expression, ")") 
+      ),
+
+    relational_expression: ($) =>
+      prec.left(
+        PREC.RELATIONAL,
+        seq(
+          $.primary_expression,  // ← только первичное слева
+          choice("=", "<>", "<", ">", "<=", ">="),
+          $._expression          // ← любое выражение справа
+        )
+      ),
+
+    logical_and_expression: ($) =>
+      prec.left(
+        PREC.LOGICAL_AND,
+        seq(
+          $._expression,
+          choice("И", "и", "and", "And", "AND"),
+          $._expression
+        )
+      ),
+
+    logical_or_expression: ($) =>
+      prec.left(
+        PREC.LOGICAL_OR,
+        seq(
+          $._expression,
+          choice("ИЛИ", "или", "Или", "or", "Or", "OR", "oR"),
+          $._expression
+        )
+      ),
+
     unary_expression: ($) =>
       prec(
         PREC.UNARY,
@@ -325,25 +372,7 @@ module.exports = grammar({
         prec.left(PREC.MULTIPLY, seq($._expression, "%", $._expression)),
         prec.left(PREC.ADD, seq($._expression, "-", $._expression)),
         prec.left(PREC.ADD, seq($._expression, "+", $._expression)),
-        prec.left(PREC.RELATIONAL, seq($._expression, "<", $._expression)),
-        prec.left(PREC.RELATIONAL, seq($._expression, "<=", $._expression)),
-        prec.left(PREC.RELATIONAL, seq($._expression, "=", $._expression)),
-        prec.left(PREC.RELATIONAL, seq($._expression, ">=", $._expression)),
-        prec.left(PREC.RELATIONAL, seq($._expression, ">", $._expression)),
-        prec.left(PREC.RELATIONAL, seq($._expression, "<>", $._expression)),
-        prec.left(PREC.LOGICAL_AND, seq($._expression, "и", $._expression)),
-        prec.left(PREC.LOGICAL_AND, seq($._expression, "И", $._expression)),
-        prec.left(PREC.LOGICAL_AND, seq($._expression, "Или", $._expression)), 
-        prec.left(PREC.LOGICAL_AND, seq($._expression, "иЛи", $._expression)), 
-        prec.left(PREC.LOGICAL_AND, seq($._expression, "AND", $._expression)),
-        prec.left(PREC.LOGICAL_AND, seq($._expression, "and", $._expression)),
-        prec.left(PREC.LOGICAL_AND, seq($._expression, "And", $._expression)), 
-        prec.left(PREC.LOGICAL_OR, seq($._expression, "ИЛИ", $._expression)),
-        prec.left(PREC.LOGICAL_OR, seq($._expression, "или", $._expression)),
-        prec.left(PREC.LOGICAL_OR, seq($._expression, "ИлИ", $._expression)), 
-        prec.left(PREC.LOGICAL_OR, seq($._expression, "OR", $._expression)),
-        prec.left(PREC.LOGICAL_OR, seq($._expression, "or", $._expression)),
-        prec.left(PREC.LOGICAL_OR, seq($._expression, "Or", $._expression))  
+        
       ),
 
     number: (_) =>

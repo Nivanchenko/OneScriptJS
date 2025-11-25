@@ -92,6 +92,16 @@ export class OSCompiler {
         this.instructions.push(new Instruction(Op.LOAD, name));
     }
 
+    visitPrimary_expression(node: Node) {
+        // primary_expression может быть identifier, _const_value, method_call, member_access, new_operator или ( _expression )
+        // Мы просто посещаем первого ребенка, который должен быть одним из этих типов
+        const child = node.namedChildren[0];
+        if (!child) {
+            throw new Error(`Пустое primary_expression: ${node.toString()}`);
+        }
+        this.visit(child);
+    }
+
     visitNumber(node: Node) {
         const NumberValue = Number(node.text);
         this.instructions.push(new Instruction(Op.PUSH, NumberValue));
@@ -251,4 +261,62 @@ export class OSCompiler {
         }
         }
     
+    visitRelational_expression(node: Node) {
+        // node.type === "relational_expression"
+        // node.children.length === 3
+        const leftNode = node.child(0);
+        const opNode = node.child(1);
+        const rightNode = node.child(2);
+
+        if (!leftNode || !opNode || !rightNode) {
+            throw new Error(`Некорректное relational_expression: ${node.toString()}`);
+        }
+
+        this.visit(leftNode);
+        this.visit(rightNode);
+
+        const opText = opNode.text.trim();
+        switch (opText) {
+            case '=': this.instructions.push(new Instruction(Op.EQ)); break;
+            case '<>': this.instructions.push(new Instruction(Op.NE)); break;
+            case '<': this.instructions.push(new Instruction(Op.LT)); break;
+            case '>': this.instructions.push(new Instruction(Op.GT)); break;
+            case '<=': this.instructions.push(new Instruction(Op.LE)); break;
+            case '>=': this.instructions.push(new Instruction(Op.GE)); break;
+            default:
+                throw new Error(`Неизвестный оператор сравнения: "${opText}"`);
+        }
+    }
+
+    visitLogical_and_expression(node: Node) {
+        // node.type === "logical_and_expression"
+        // node.children.length === 3
+        const leftNode = node.child(0);
+        const opNode = node.child(1);
+        const rightNode = node.child(2);
+
+        if (!leftNode || !opNode || !rightNode) {
+            throw new Error(`Некорректное logical_and_expression: ${node.toString()}`);
+        }
+
+        this.visit(leftNode);
+        this.visit(rightNode);
+        this.instructions.push(new Instruction(Op.AND));
+    }
+
+    visitLogical_or_expression(node: Node) {
+        // node.type === "logical_or_expression"
+        // node.children.length === 3
+        const leftNode = node.child(0);
+        const opNode = node.child(1);
+        const rightNode = node.child(2);
+
+        if (!leftNode || !opNode || !rightNode) {
+            throw new Error(`Некорректное logical_or_expression: ${node.toString()}`);
+        }
+
+        this.visit(leftNode);
+        this.visit(rightNode);
+        this.instructions.push(new Instruction(Op.OR));
+    }
 }
