@@ -17,16 +17,19 @@ function walk(node: Node, depth = 0) {
 
   const source = 
   `
-  Если а = 2 И в = "1" Тогда
-    б = 1;
+  б = 1;
+  а = 1;
+  в = 0;
+  Если а = 1 и б = 0 Тогда
+      в = 1
   КонецЕсли;
   `;
   const tree = await OS.GetTree(source);
   if (tree) walk(tree.rootNode);
-  await OS.Run(source);
-  const variables = OS.dumpVariables();
   console.log(tree?.rootNode.toString());
-  console.log(variables);
+  // await OS.Run(source);
+  // const variables = OS.dumpVariables();
+  // console.log(variables);
 })();
 
 // (async () => {
