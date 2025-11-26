@@ -587,4 +587,76 @@ describe('OneScript', () => {
         expect(vars['а']).toBe(-3);
     });
 
+    it('if elsif', async () => {
+
+        // Given
+        const source = 
+        `
+        а = 1;
+        в = 0;
+        Если а = 0 Тогда
+            в = 1
+        ИначеЕсли а = 1 Тогда
+            в = 2
+        Иначе
+            в = 3
+        КонецЕсли;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['в']).toBe(2);
+    });
+
+    it('if elsif (2)', async () => {
+
+        // Given
+        const source = 
+        `
+        а = 0;
+        в = 0;
+        Если а = 1 Тогда
+            в = 1
+        ИначеЕсли а = 0 Тогда
+            в = 2
+        Иначе
+            в = 3
+        КонецЕсли;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['в']).toBe(2);
+    });
+
+    it('if elsif (3)', async () => {
+
+        // Given
+        const source = 
+        `
+        а = 2;
+        в = 0;
+        Если а = 1 Тогда
+            в = 1
+        ИначеЕсли а = 0 Тогда
+            в = 2
+        Иначе
+            в = 3
+        КонецЕсли;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['в']).toBe(3);
+    });
+
 });
