@@ -17,24 +17,23 @@ function walk(node: Node, depth = 0) {
 
   const source = 
   `
-  а = 1;
+  а = 3;
   в = 0;
-  Если а = 1 И в = 0 Тогда
+  Если а = 1 Тогда
       в = 1;
-  ИначеЕсли а = 2 ИЛИ в = 1 Тогда
+  ИначеЕсли а = 2 Тогда
       в = 2;
-  ИначеЕсли а = 3 Тогда
+  Иначе
       в = 3;
-  Иначе 
-      в = 4;
   КонецЕсли;
   `;
+   
   const tree = await OS.GetTree(source);
   if (tree) walk(tree.rootNode);
   console.log(tree?.rootNode.toString());
   await OS.Run(source);
-  // const variables = OS.dumpVariables();
-  // console.log(variables);
+  const variables = OS.dumpVariables();
+  console.log(variables);
 })();
 
 // (async () => {

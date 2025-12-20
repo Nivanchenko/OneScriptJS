@@ -183,49 +183,146 @@ export class OSCompiler {
     }
 
     visitIf_statement(node: Node) {
-        const named = node.namedChildren; // только значимые узлы
-
-        if (named.length < 2) {
+        // Получаем всех детей, включая анонимные узлы
+        const children = node.children;
+        
+        if (children.length < 2) {
             throw new Error("Ожидалось: условие и тело");
         }
 
-        const condition = named[0];
-        const thenBody = named[1];
-        const elseBody = named.length > 2 ? named[2] : null;
+        const endLabel = this.newLabel();
+        let currentChildIndex = 0;
 
-        if (!condition || !thenBody) {
+        // Находим первое условие (может быть relational_expression или logical_and_expression или logical_or_expression)
+        let firstCondition: Node | null = null;
+        while (currentChildIndex < children.length && !firstCondition) {
+            const child = children[currentChildIndex];
+            if (child && (child.type === 'relational_expression' ||
+                          child.type === 'logical_and_expression' ||
+                          child.type === 'logical_or_expression' ||
+                          child.type === 'unary_expression')) {
+                firstCondition = child;
+            }
+            currentChildIndex++;
+        }
+
+        // Пропускаем "Тогда", если есть
+        while (currentChildIndex < children.length) {
+            const child = children[currentChildIndex];
+            if (child && (child.type === 'assignment' || child.type === 'relational_expression')) {
+                break;
+            }
+            currentChildIndex++;
+        }
+
+        // Находим тело then
+        let thenBody: Node | null = null;
+        if (currentChildIndex < children.length) {
+            const child = children[currentChildIndex];
+            if (child && child.type === 'assignment') {
+                thenBody = child;
+                currentChildIndex++;
+            }
+        }
+
+        if (!firstCondition || !thenBody) {
             throw new Error("Condition or thenBody is null in if statement");
         }
 
-        const endLabel = this.newLabel();
+        // Создаем метку для следующего условия (если будет elsif) или else
+        let nextConditionLabel = this.newLabel();
 
-        if (elseBody) {
-            if (!elseBody) {
-            throw new Error("Else body is null in if statement");
-            }
+        // Компилируем первое условие
+        this.visit(firstCondition);
+        this.instructions.push(new Instruction(Op.JUMP_IF_FALSE, nextConditionLabel));
+
+        // Тело "Тогда"
+        this.visit(thenBody);
+        this.instructions.push(new Instruction(Op.JUMP, endLabel));
+
+        // Обрабатываем все "ИначеЕсли" и "Иначе"
+        while (currentChildIndex < children.length) {
+            // Проверяем, является ли текущий узел условием (relational_expression)
+            const child = children[currentChildIndex];
             
-            const elseLabel = this.newLabel();
+            if (!child) {
+                currentChildIndex++;
+                continue;
+            }
 
-            // Компилируем условие
-            this.visit(condition);
-            this.instructions.push(new Instruction(Op.JUMP_IF_FALSE, elseLabel));
+            // Если это условие, значит это elsif
+            if (child.type === 'relational_expression') {
+                // Добавляем метку для предыдущего условия
+                this.instructions.push(new Instruction(Op.LABEL, nextConditionLabel));
+                
+                // Получаем условие elsif
+                const elsifCondition = child;
+                currentChildIndex++;
+                
+                // Пропускаем "Тогда", если есть
+                while (currentChildIndex < children.length) {
+                    const nextChild = children[currentChildIndex];
+                    if (nextChild && (nextChild.type === 'assignment' ||
+                                     nextChild.type === 'relational_expression' ||
+                                     nextChild.type === 'logical_and_expression' ||
+                                     nextChild.type === 'logical_or_expression' ||
+                                     nextChild.type === 'unary_expression')) {
+                        break;
+                    }
+                    currentChildIndex++;
+                }
+                
+                // Находим тело elsif
+                let elsifBody: Node | null = null;
+                if (currentChildIndex < children.length) {
+                    const nextChild = children[currentChildIndex];
+                    if (nextChild && nextChild.type === 'assignment') {
+                        elsifBody = nextChild;
+                        currentChildIndex++;
+                    }
+                }
 
-            // Тело "Тогда"
-            this.visit(thenBody);
-            this.instructions.push(new Instruction(Op.JUMP, endLabel));
+                if (!elsifCondition || !elsifBody) {
+                    throw new Error("Elsif condition or body is null");
+                }
 
-            // Тело "Иначе"
-            this.instructions.push(new Instruction(Op.LABEL, elseLabel));
-            this.visit(elseBody);
-        } else {
-            const skipLabel = this.newLabel();
-            this.visit(condition);
-            this.instructions.push(new Instruction(Op.JUMP_IF_FALSE, skipLabel));
-            this.visit(thenBody);
-            this.instructions.push(new Instruction(Op.LABEL, skipLabel));
-            return;
+                // Создаем новую метку для следующего условия или else
+                const newNextConditionLabel = this.newLabel();
+
+                // Компилируем условие elsif
+                this.visit(elsifCondition);
+                this.instructions.push(new Instruction(Op.JUMP_IF_FALSE, newNextConditionLabel));
+
+                // Тело elsif
+                this.visit(elsifBody);
+                this.instructions.push(new Instruction(Op.JUMP, endLabel));
+
+                // Обновляем метку
+                nextConditionLabel = newNextConditionLabel;
+            } else if (child.type === 'assignment') {
+                // Это else часть - добавляем метку для else
+                this.instructions.push(new Instruction(Op.LABEL, nextConditionLabel));
+                
+                // Тело "Иначе"
+                const elseBody = child;
+                currentChildIndex++;
+                
+                if (elseBody) {
+                    this.visit(elseBody);
+                }
+                this.instructions.push(new Instruction(Op.JUMP, endLabel));
+                
+                // Завершаем обработку
+                this.instructions.push(new Instruction(Op.LABEL, endLabel));
+                return;
+            } else {
+                // Это часть тела или ключевое слово, пропускаем
+                currentChildIndex++;
+            }
         }
 
+        // Добавляем финальную метку для случая, когда ни одно условие не выполнилось
+        this.instructions.push(new Instruction(Op.LABEL, nextConditionLabel));
         this.instructions.push(new Instruction(Op.LABEL, endLabel));
     }
 

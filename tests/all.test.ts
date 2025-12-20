@@ -453,7 +453,7 @@ describe('OneScript', () => {
         const vars = oneScript.dumpVariables();
 
         // Then
-        expect(vars['в']).toBe(2);
+        expect(vars['в']).toBe(1);
     });
 
     it('if else (2)', async () => {
