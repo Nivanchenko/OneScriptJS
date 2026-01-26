@@ -659,4 +659,78 @@ describe('OneScript', () => {
         expect(vars['в']).toBe(3);
     });
 
+    it('for loop', async () => {
+
+        // Given
+        const source = 
+        `
+        а = 1;
+
+        Для н = 1 по 10 Цикл
+
+            а = а + н;
+
+        КонецЦикла;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['а']).toBe(56);
+    });
+
+    it('for loop break', async () => {
+
+        // Given
+        const source = 
+        `
+        а = 1;
+
+        Для н = 1 по 10 Цикл
+
+            а = а + н;
+
+            Если а > 5 Тогда
+                Прервать;
+            КонецЕсли;
+
+        КонецЦикла;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['а']).toBe(7);
+    });
+
+    it('for loop continue', async () => {
+
+        // Given
+        const source = 
+        `
+        а = 1;
+
+        Для н = 1 по 10 Цикл
+
+            Если н = 5 Тогда
+                Продолжить;
+            КонецЕсли;
+
+            а = а + н;
+
+        КонецЦикла;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['а']).toBe(51);
+    });
+
 });
