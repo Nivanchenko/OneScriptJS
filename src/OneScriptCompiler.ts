@@ -17,6 +17,8 @@ export class OSCompiler {
 
     instructions: Array<Instruction> = [];
     _nextLabelId: number = 0;
+    breakTargets: string[] = [];
+    continueTargets: string[] = [];
 
     newLabel(): string {
         return `L${this._nextLabelId++}`;
@@ -26,8 +28,8 @@ export class OSCompiler {
         return this.instructions;
     }
 
-    capitalize(s: string): string { 
-        return s.charAt(0).toUpperCase() + s.slice(1); 
+    capitalize(s: string): string {
+        return s.charAt(0).toUpperCase() + s.slice(1);
     }
 
     loadAst(astNode: Node) {
@@ -120,10 +122,10 @@ export class OSCompiler {
         }
 
         // Случай скобок: ( expr )
-        if (children.length === 3 && 
-            children[0] && 
-            children[2] && 
-            children[0].text === '(' && 
+        if (children.length === 3 &&
+            children[0] &&
+            children[2] &&
+            children[0].text === '(' &&
             children[2].text === ')') {
             
             if (!children[1]) {
@@ -189,10 +191,10 @@ export class OSCompiler {
         if (children.length < 2) {
             throw new Error("Ожидалось: условие и тело");
         }
-
+        
         const endLabel = this.newLabel();
         let currentChildIndex = 0;
-
+        
         // Находим первое условие (может быть relational_expression или logical_and_expression или logical_or_expression)
         let firstCondition: Node | null = null;
         while (currentChildIndex < children.length && !firstCondition) {
@@ -205,26 +207,29 @@ export class OSCompiler {
             }
             currentChildIndex++;
         }
-
+        
         // Пропускаем "Тогда", если есть
         while (currentChildIndex < children.length) {
             const child = children[currentChildIndex];
-            if (child && (child.type === 'assignment' || child.type === 'relational_expression')) {
+            if (child && (child.type === 'assignment' ||
+                          child.type === 'relational_expression' ||
+                          child.type === 'if_statement' ||
+                          child.type === 'compound_statement')) {
                 break;
             }
             currentChildIndex++;
         }
-
+        
         // Находим тело then
         let thenBody: Node | null = null;
         if (currentChildIndex < children.length) {
             const child = children[currentChildIndex];
-            if (child && child.type === 'assignment') {
+            if (child && (child.type === 'assignment' || child.type === 'if_statement' || child.type === 'compound_statement')) {
                 thenBody = child;
                 currentChildIndex++;
             }
         }
-
+        
         if (!firstCondition || !thenBody) {
             throw new Error("Condition or thenBody is null in if statement");
         }
@@ -415,5 +420,94 @@ export class OSCompiler {
         this.visit(leftNode);
         this.visit(rightNode);
         this.instructions.push(new Instruction(Op.OR));
+    }
+
+    visitFor_loop(node: Node) {
+        // node.type === "for_loop"
+        // Структура: For variable = start to end Do ... EndFor
+        const children = node.children;
+        
+        // Узел for_loop имеет 6 детей:
+        // 0: identifier (переменная цикла)
+        // 1: = (присваивание)
+        // 2: number (начальное значение)
+        // 3: number (конечное значение)
+        // 4: assignment (тело цикла)
+        // 5: ; (разделитель)
+        
+        if (children.length < 6) {
+            throw new Error(`Некорректный for_loop: ${node.toString()}`);
+        }
+        
+        const variableNode = children[0]; // identifier
+        const startNode = children[2];    // number (начальное значение)
+        const endNode = children[3];      // number (конечное значение)
+        const bodyNode = children[4];     // assignment (тело цикла)
+        
+        if (!variableNode || !startNode || !endNode || !bodyNode) {
+            throw new Error(`Некорректный for_loop: ${node.toString()}`);
+        }
+        
+        // Генерируем инструкции для цикла for
+        const loopStartLabel = this.newLabel();
+        const loopEndLabel = this.newLabel();
+        const loopContinueLabel = this.newLabel();
+        
+        // Сохраняем текущие стеки целей и добавляем новые для этого цикла
+        const oldBreakTargets = [...this.breakTargets];
+        const oldContinueTargets = [...this.continueTargets];
+        
+        this.breakTargets.push(loopEndLabel);
+        this.continueTargets.push(loopContinueLabel);
+        
+        // Инициализация переменной цикла
+        this.visit(startNode);
+        this.instructions.push(new Instruction(Op.STORE, variableNode.text));
+        
+        // Метка начала цикла
+        this.instructions.push(new Instruction(Op.LABEL, loopStartLabel));
+        
+        // Проверка условия продолжения цикла
+        this.instructions.push(new Instruction(Op.LOAD, variableNode.text));
+        this.visit(endNode);
+        this.instructions.push(new Instruction(Op.LE)); // переменная <= конечное значение
+        
+        // Переход к концу цикла, если условие не выполняется
+        this.instructions.push(new Instruction(Op.JUMP_IF_FALSE, loopEndLabel));
+        
+        // Тело цикла
+        this.visit(bodyNode);
+        
+        // Переход к продолжению цикла (для обработки continue)
+        this.instructions.push(new Instruction(Op.JUMP, loopContinueLabel));
+        
+        // Метка продолжения цикла
+        this.instructions.push(new Instruction(Op.LABEL, loopContinueLabel));
+        
+        // Инкремент переменной цикла
+        this.instructions.push(new Instruction(Op.LOAD, variableNode.text));
+        this.instructions.push(new Instruction(Op.PUSH, 1));
+        this.instructions.push(new Instruction(Op.ADD));
+        this.instructions.push(new Instruction(Op.STORE, variableNode.text));
+        
+        // Переход к началу цикла
+        this.instructions.push(new Instruction(Op.JUMP, loopStartLabel));
+        
+        // Метка окончания цикла
+        this.instructions.push(new Instruction(Op.LABEL, loopEndLabel));
+        
+        // Восстанавливаем старые стеки целей
+        this.breakTargets = oldBreakTargets;
+        this.continueTargets = oldContinueTargets;
+    }
+
+    visitBreak_statement(node: Node) {
+        // Генерируем инструкцию break
+        this.instructions.push(new Instruction(Op.BREAK));
+    }
+
+    visitContinue_statement(node: Node) {
+        // Генерируем инструкцию continue
+        this.instructions.push(new Instruction(Op.CONTINUE));
     }
 }
