@@ -681,6 +681,37 @@ describe('OneScript', () => {
         expect(vars['а']).toBe(56);
     });
 
+     it('for loop multiple operations', async () => {
+
+        // Given
+        const source = 
+        `
+        а = 1;
+        б = 0;
+        в = 0;
+        г = 0;
+
+        Для н = 1 по 10 Цикл
+
+            а = а + н;
+            б = 1;
+            в = 1;
+            г = 1;
+
+        КонецЦикла;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['а']).toBe(56);
+        expect(vars['б']).toBe(1);
+        expect(vars['в']).toBe(1);
+        expect(vars['г']).toBe(1);
+    });
+
     it('for loop break', async () => {
 
         // Given
