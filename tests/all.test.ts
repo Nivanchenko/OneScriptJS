@@ -712,6 +712,34 @@ describe('OneScript', () => {
         expect(vars['г']).toBe(1);
     });
 
+    it('for loop simple break', async () => {
+
+        // Given
+        const source = 
+        `
+        а = 1;
+        б = 0;
+
+        Для н = 1 по 10 Цикл
+
+            а = а + н;
+
+            Прервать;
+
+            б = 1;
+
+        КонецЦикла;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['а']).toBe(2);
+        expect(vars['б']).toBe(0);
+    });
+
     it('for loop break', async () => {
 
         // Given
@@ -736,6 +764,35 @@ describe('OneScript', () => {
 
         // Then
         expect(vars['а']).toBe(7);
+    });
+
+    it('for loop simple continue', async () => {
+
+        // Given
+        const source = 
+        `
+        а = 1;
+
+        б = 0;
+
+        Для н = 1 по 10 Цикл
+
+            а = а + н;
+
+            Продолжить;
+
+            б = 1;
+
+        КонецЦикла;
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['а']).toBe(56);
+        expect(vars['б']).toBe(0);
     });
 
     it('for loop continue', async () => {
