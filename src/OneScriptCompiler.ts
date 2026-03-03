@@ -444,8 +444,8 @@ export class OSCompiler {
         const endNode = children[3];      // number (конечное значение)
         const bodyNodes = new Array();    // Тело цикла
 
-        for (let childCouner = 0; childCouner < children.length; childCouner++) {
-            let child = children[childCouner];
+        for (let childCounter = 0; childCounter < children.length; childCounter++) {
+            let child = children[childCounter];
 
             if (child?.isNamed) {
                 bodyNodes.push(child)
