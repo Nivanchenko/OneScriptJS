@@ -442,9 +442,17 @@ export class OSCompiler {
         const variableNode = children[0]; // identifier
         const startNode = children[2];    // number (начальное значение)
         const endNode = children[3];      // number (конечное значение)
-        const bodyNode = children[4];     // assignment (тело цикла)
+        const bodyNodes = new Array();    // Тело цикла
+
+        for (let childCouner = 0; childCouner < children.length; childCouner++) {
+            let child = children[childCouner];
+
+            if (child?.isNamed) {
+                bodyNodes.push(child)
+            }
+        }
         
-        if (!variableNode || !startNode || !endNode || !bodyNode) {
+        if (!variableNode || !startNode || !endNode) {
             throw new Error(`Некорректный for_loop: ${node.toString()}`);
         }
         
@@ -476,7 +484,9 @@ export class OSCompiler {
         this.instructions.push(new Instruction(Op.JUMP_IF_FALSE, loopEndLabel));
         
         // Тело цикла
-        this.visit(bodyNode);
+        for (let child of bodyNodes){
+            this.visit(child);
+        }
         
         // Переход к продолжению цикла (для обработки continue)
         this.instructions.push(new Instruction(Op.JUMP, loopContinueLabel));
