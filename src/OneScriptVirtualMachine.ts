@@ -6,29 +6,96 @@ export class OSMachine {
   private variables: Map<string, any>;
   private labels: Map<any, number>;
   private ip: number;
+  private callStack: Array<{returnIP: number, returnLabel: string | null, localVars: Map<string, any>}>;
+  private functions: Map<string, {startIP: number, endIP: number, params: string[], endLabel: string | null}>;
 
   constructor() {
     this.stack = [];
-    this.variables = new Map<string, any>(); // имя → значение
-    this.labels = new Map<any, number>(); // имя метки → индекс в программе
-    this.ip = 0; // instruction pointer (для управления переходами)
+    this.variables = new Map<string, any>();
+    this.labels = new Map<any, number>();
+    this.ip = 0;
+    this.callStack = [];
+    this.functions = new Map();
   }
 
-    resolveLabels(instructions: Instruction[]) {
-        this.labels.clear();
-        for (let i = 0; i < instructions.length; i++) {
-            const instr = instructions[i];
-            if (instr && instr.code === Op.LABEL) {
-            this.labels.set(instr.arg, i);
-            }
-        }
+  resolveLabels(instructions: Instruction[]) {
+    this.labels.clear();
+    for (let i = 0; i < instructions.length; i++) {
+      const instr = instructions[i];
+      if (instr && instr.code === Op.LABEL) {
+        this.labels.set(instr.arg, i);
+      }
     }
+  }
+
+  resolveFunctions(instructions: Instruction[]) {
+    this.functions.clear();
+    for (let i = 0; i < instructions.length; i++) {
+      const instr = instructions[i];
+      if (instr && instr.code === Op.BEGIN_FUNC && instr.arg.name) {
+        const funcName = instr.arg.name;
+        const { params, endLabel } = instr.arg;
+        
+        // Находим endIP (после END_FUNC)
+        let endIP = i + 1;
+        for (let j = i + 1; j < instructions.length; j++) {
+          if (instructions[j] && instructions[j].code === Op.END_FUNC) {
+            endIP = j + 1;
+            break;
+          }
+        }
+        
+        this.functions.set(funcName, {
+          startIP: i,
+          endIP,
+          params,
+          endLabel: endLabel || null
+        });
+      }
+    }
+  }
+
+  private getVariable(name: string): any {
+    if (this.callStack.length > 0) {
+      const currentFrame = this.callStack[this.callStack.length - 1];
+      if (currentFrame.localVars.has(name)) {
+        return currentFrame.localVars.get(name);
+      }
+    }
+    if (this.variables.has(name)) {
+      return this.variables.get(name);
+    }
+    throw new ReferenceError(`Переменная не определена: ${name}`);
+  }
+
+  private setVariable(name: string, value: any) {
+    if (this.callStack.length > 0) {
+      const currentFrame = this.callStack[this.callStack.length - 1];
+      if (currentFrame.localVars.has(name)) {
+        currentFrame.localVars.set(name, value);
+        return;
+      }
+    }
+    this.variables.set(name, value);
+  }
 
   run(instructions: Instruction[]) {
     this.resolveLabels(instructions);
+    this.resolveFunctions(instructions);
     this.ip = 0;
 
     while (this.ip < instructions.length) {
+      // Проверяем, не находимся ли мы внутри тела функции в глобальном контексте
+      if (this.callStack.length === 0) {
+        for (const [funcName, funcInfo] of this.functions) {
+          if (this.ip > funcInfo.startIP && this.ip < funcInfo.endIP) {
+            // Мы внутри тела функции, но не в вызове - пропускаем до конца функции
+            this.ip = funcInfo.endIP;
+            break;
+          }
+        }
+      }
+      
       const instr = instructions[this.ip];
       if (!instr) {
         throw new Error(`Instruction at index ${this.ip} is undefined`);
@@ -41,14 +108,13 @@ export class OSMachine {
           break;
 
         case Op.LOAD:
-          const value = this.variables.get(instr.arg);
-          if (value === undefined) throw new ReferenceError(`Переменная не определена: ${instr.arg}`);
+          const value = this.getVariable(instr.arg);
           this.stack.push(value);
           break;
 
         case Op.STORE:
           const val = this.stack.pop();
-          this.variables.set(instr.arg, val);
+          this.setVariable(instr.arg, val);
           break;
 
         case Op.ADD:
@@ -88,7 +154,7 @@ export class OSMachine {
           break;
 
         case Op.DECLARE:
-          this.variables.set(instr.arg, null); // инициализируем
+          this.variables.set(instr.arg, null);
           break;
 
         case Op.EQ:
@@ -168,7 +234,7 @@ export class OSMachine {
           if (!jmpvalue) {
             const target = this.labels.get(instr.arg);
             if (target === undefined) throw new Error(`Метка не найдена: ${instr.arg}`);
-            this.ip = target + 1; // +1, потому что в конце цикла ip++
+            this.ip = target + 1;
           }
           break;
 
@@ -179,7 +245,6 @@ export class OSMachine {
           break;
 
         case Op.LABEL:
-          // ничего не делаем — метки уже разрешены
           break;
 
         case Op.NOT:
@@ -202,17 +267,71 @@ export class OSMachine {
           break;
 
         case Op.BREAK:
-          // Переход к метке конца цикла (метка хранится в arg инструкции)
           const breakTarget = this.labels.get(instr.arg);
           if (breakTarget === undefined) throw new Error(`Метка для break не найдена: ${instr.arg}`);
           this.ip = breakTarget + 1;
           break;
 
         case Op.CONTINUE:
-          // Переход к метке продолжения цикла (метка хранится в arg инструкции)
           const continueTarget = this.labels.get(instr.arg);
           if (continueTarget === undefined) throw new Error(`Метка для continue не найдена: ${instr.arg}`);
           this.ip = continueTarget + 1;
+          break;
+
+        case Op.BEGIN_FUNC:
+          // BEGIN_FUNC используется только для регистрации функции в resolveFunctions
+          // При выполнении просто пропускаем эту инструкцию
+          break;
+
+        case Op.CALL:
+          {
+            const { name, paramCount, returnLabel } = instr.arg;
+            const funcInfo = this.functions.get(name);
+            if (!funcInfo) {
+              throw new Error(`Функция не найдена: ${name}`);
+            }
+            
+            const args = [];
+            for (let i = 0; i < paramCount; i++) {
+              args.unshift(this.stack.pop());
+            }
+            
+            const localVars = new Map<string, any>();
+            for (let i = 0; i < funcInfo.params.length; i++) {
+              localVars.set(funcInfo.params[i], args[i]);
+            }
+            
+            this.callStack.push({
+              returnIP: this.ip,
+              returnLabel: returnLabel,
+              localVars: localVars
+            });
+            
+            this.ip = funcInfo.startIP + 1;
+          }
+          break;
+
+        case Op.RET:
+          {
+            if (this.callStack.length === 0) {
+              throw new Error('RET без вызова функции');
+            }
+            
+            const frame = this.callStack.pop()!;
+            
+            // Если на стеке есть значение возврата, оно должно остаться для вызывающей стороны
+            // Ничего не делаем со стеком - значение уже на вершине
+            
+            const returnTarget = this.labels.get(frame.returnLabel);
+            if (returnTarget !== undefined) {
+              this.ip = returnTarget + 1;
+            } else {
+              this.ip = frame.returnIP;
+            }
+          }
+          break;
+
+        case Op.END_FUNC:
           break;
 
         default:

@@ -19,6 +19,9 @@ export class OSCompiler {
     _nextLabelId: number = 0;
     breakTargets: string[] = [];
     continueTargets: string[] = [];
+    functions: Map<string, {startLabel: string, params: string[], body: Node | null}> = new Map();
+    currentFunction: string | null = null;
+    functionReturnLabels: string[] = [];
 
     newLabel(): string {
         return `L${this._nextLabelId++}`;
@@ -65,6 +68,14 @@ export class OSCompiler {
                     const name = id.text;
                     this.instructions.push(new Instruction(Op.DECLARE, name));
                 }
+            }
+        }
+    }
+
+    visitMethod_block(node: Node) {
+        for (const child of node.namedChildren) {
+            if (child && (child.type === 'func_declaration' || child.type === 'proc_declaration')) {
+                this.visit(child);
             }
         }
     }
@@ -492,5 +503,137 @@ export class OSCompiler {
             throw new Error('Продолжить вне цикла');
         }
         this.instructions.push(new Instruction(Op.CONTINUE, this.continueTargets[this.continueTargets.length - 1]));
+    }
+
+    visitFunc_declaration(node: Node) {
+        const funcNameNode = node.childForFieldName('func_name');
+        if (!funcNameNode) {
+            throw new Error('Функция без имени');
+        }
+        const funcName = funcNameNode.text;
+        
+        const params: string[] = [];
+        const argsListNode = node.namedChildren.find(c => c && c.type === 'argument_list');
+        if (argsListNode) {
+            const argumentsNode = argsListNode.namedChildren.find(c => c && c.type === 'arguments');
+            if (argumentsNode) {
+                for (const child of argumentsNode.namedChildren) {
+                    if (child && child.type === 'identifier') {
+                        params.push(child.text);
+                    }
+                }
+            }
+        }
+        
+        const funcStartLabel = this.newLabel();
+        const funcEndLabel = this.newLabel();
+        
+        this.functions.set(funcName, { startLabel: funcStartLabel, params, body: node });
+        
+        this.instructions.push(new Instruction(Op.LABEL, funcStartLabel));
+        this.instructions.push(new Instruction(Op.BEGIN_FUNC, { name: funcName, params, endLabel: funcEndLabel }));
+        
+        const oldBreakTargets = [...this.breakTargets];
+        const oldContinueTargets = [...this.continueTargets];
+        this.breakTargets = [];
+        this.continueTargets = [];
+        
+        for (const child of node.namedChildren) {
+            if (child && child.type === 'var_block') {
+                this.visit(child);
+            } else if (child && (child.type === '_code_block' || child.type === 'return_statement')) {
+                this.visit(child);
+            }
+        }
+        
+        // Явный RET в конце функции без значения возврата
+        this.instructions.push(new Instruction(Op.RET, null));
+        this.instructions.push(new Instruction(Op.LABEL, funcEndLabel));
+        this.instructions.push(new Instruction(Op.END_FUNC));
+        
+        this.breakTargets = oldBreakTargets;
+        this.continueTargets = oldContinueTargets;
+    }
+
+    visitProc_declaration(node: Node) {
+        const procNameNode = node.childForFieldName('proc_name');
+        if (!procNameNode) {
+            throw new Error('Процедура без имени');
+        }
+        const procName = procNameNode.text;
+        
+        const params: string[] = [];
+        const argsListNode = node.namedChildren.find(c => c && c.type === 'argument_list');
+        if (argsListNode) {
+            const argumentsNode = argsListNode.namedChildren.find(c => c && c.type === 'arguments');
+            if (argumentsNode) {
+                for (const child of argumentsNode.namedChildren) {
+                    if (child && child.type === 'identifier') {
+                        params.push(child.text);
+                    }
+                }
+            }
+        }
+        
+        const procStartLabel = this.newLabel();
+        this.functions.set(procName, { startLabel: procStartLabel, params, body: null });
+        
+        this.instructions.push(new Instruction(Op.LABEL, procStartLabel));
+        this.instructions.push(new Instruction(Op.BEGIN_FUNC, { name: procName, params, endLabel: null }));
+        
+        const oldBreakTargets = [...this.breakTargets];
+        const oldContinueTargets = [...this.continueTargets];
+        this.breakTargets = [];
+        this.continueTargets = [];
+        
+        for (const child of node.namedChildren) {
+            if (child && (child.type === 'var_block' || child.type === '_code_block')) {
+                this.visit(child);
+            }
+        }
+        
+        this.instructions.push(new Instruction(Op.RET));
+        this.instructions.push(new Instruction(Op.END_FUNC));
+        
+        this.breakTargets = oldBreakTargets;
+        this.continueTargets = oldContinueTargets;
+    }
+
+    visitReturn_statement(node: Node) {
+        const exprNode = node.namedChildren.find(c => c && c.type !== 'return_statement' && c.isNamed);
+        
+        if (exprNode) {
+            this.visit(exprNode);
+        }
+        
+        // RET уже кладет значение на стек если оно есть
+        this.instructions.push(new Instruction(Op.RET));
+    }
+
+    visitMethod_call(node: Node) {
+        const identifierNode = node.namedChildren.find(c => c && c.type === 'identifier');
+        if (!identifierNode) {
+            throw new Error('Вызов метода без имени');
+        }
+        const methodName = identifierNode.text;
+        
+        const argsListNode = node.namedChildren.find(c => c && c.type === 'call_args');
+        let argCount = 0;
+        if (argsListNode) {
+            for (const child of argsListNode.namedChildren) {
+                if (child && child.isNamed) {
+                    this.visit(child);
+                    argCount++;
+                }
+            }
+        }
+        
+        if (this.functions.has(methodName)) {
+            const returnLabel = this.newLabel();
+            this.instructions.push(new Instruction(Op.CALL, { name: methodName, paramCount: argCount, returnLabel }));
+            this.instructions.push(new Instruction(Op.LABEL, returnLabel));
+        } else {
+            throw new Error(`Функция не найдена: ${methodName}`);
+        }
     }
 }

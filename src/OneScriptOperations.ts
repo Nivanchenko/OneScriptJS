@@ -33,6 +33,11 @@ const Op = {
     FOR_CONDITION: 'FOR_CONDITION',
     FOR_INCREMENT: 'FOR_INCREMENT',
     FOR_END: 'FOR_END',
+  // Функции
+    CALL: 'CALL',
+    RET: 'RET',
+    BEGIN_FUNC: 'BEGIN_FUNC',
+    END_FUNC: 'END_FUNC',
                 
 } as const;
 
