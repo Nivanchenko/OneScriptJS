@@ -841,4 +841,24 @@ describe('OneScript', () => {
         expect(vars['а']).toBe(42);
     });
 
+    it('function no args', async () => {
+
+        // Given
+        const source = 
+        `
+        Функция СложитьЧисла()
+            Возврат 42;
+        КонецФункции
+
+        а = СложитьЧисла();
+        `;
+
+        // When 
+        await oneScript.Run(source);
+        const vars = oneScript.dumpVariables();
+
+        // Then
+        expect(vars['а']).toBe(42);
+    });
+
 });
