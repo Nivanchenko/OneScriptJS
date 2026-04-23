@@ -6,16 +6,12 @@ export class OSMachine {
   private variables: Map<string, any>;
   private labels: Map<any, number>;
   private ip: number;
-  private breakTargets: string[]; // Стек целей для break
-  private continueTargets: string[]; // Стек целей для continue
 
   constructor() {
     this.stack = [];
     this.variables = new Map<string, any>(); // имя → значение
     this.labels = new Map<any, number>(); // имя метки → индекс в программе
     this.ip = 0; // instruction pointer (для управления переходами)
-    this.breakTargets = []; // Стек целей для break
-    this.continueTargets = []; // Стек целей для continue
   }
 
     resolveLabels(instructions: Instruction[]) {
@@ -31,8 +27,6 @@ export class OSMachine {
   run(instructions: Instruction[]) {
     this.resolveLabels(instructions);
     this.ip = 0;
-    this.breakTargets = [];
-    this.continueTargets = [];
 
     while (this.ip < instructions.length) {
       const instr = instructions[this.ip];
@@ -208,21 +202,17 @@ export class OSMachine {
           break;
 
         case Op.BREAK:
-          // Переход к следующей за циклом метке
-          if (this.breakTargets.length > 0) {
-            const target = this.labels.get(this.breakTargets[this.breakTargets.length - 1]);
-            if (target === undefined) throw new Error(`Метка для break не найдена: ${this.breakTargets[this.breakTargets.length - 1]}`);
-            this.ip = target + 1;
-          }
+          // Переход к метке конца цикла (метка хранится в arg инструкции)
+          const breakTarget = this.labels.get(instr.arg);
+          if (breakTarget === undefined) throw new Error(`Метка для break не найдена: ${instr.arg}`);
+          this.ip = breakTarget + 1;
           break;
 
         case Op.CONTINUE:
-          // Переход к следующей итерации цикла
-          if (this.continueTargets.length > 0) {
-            const target = this.labels.get(this.continueTargets[this.continueTargets.length - 1]);
-            if (target === undefined) throw new Error(`Метка для continue не найдена: ${this.continueTargets[this.continueTargets.length - 1]}`);
-            this.ip = target + 1;
-          }
+          // Переход к метке продолжения цикла (метка хранится в arg инструкции)
+          const continueTarget = this.labels.get(instr.arg);
+          if (continueTarget === undefined) throw new Error(`Метка для continue не найдена: ${instr.arg}`);
+          this.ip = continueTarget + 1;
           break;
 
         default:

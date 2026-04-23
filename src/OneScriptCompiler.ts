@@ -208,23 +208,11 @@ export class OSCompiler {
             currentChildIndex++;
         }
         
-        // Пропускаем "Тогда", если есть
-        while (currentChildIndex < children.length) {
-            const child = children[currentChildIndex];
-            if (child && (child.type === 'assignment' ||
-                          child.type === 'relational_expression' ||
-                          child.type === 'if_statement' ||
-                          child.type === 'compound_statement')) {
-                break;
-            }
-            currentChildIndex++;
-        }
-        
-        // Находим тело then
+        // Находим тело then - первый именованный узел после условия
         let thenBody: Node | null = null;
         if (currentChildIndex < children.length) {
             const child = children[currentChildIndex];
-            if (child && (child.type === 'assignment' || child.type === 'if_statement' || child.type === 'compound_statement')) {
+            if (child && child.isNamed) {
                 thenBody = child;
                 currentChildIndex++;
             }
@@ -264,24 +252,11 @@ export class OSCompiler {
                 const elsifCondition = child;
                 currentChildIndex++;
                 
-                // Пропускаем "Тогда", если есть
-                while (currentChildIndex < children.length) {
-                    const nextChild = children[currentChildIndex];
-                    if (nextChild && (nextChild.type === 'assignment' ||
-                                     nextChild.type === 'relational_expression' ||
-                                     nextChild.type === 'logical_and_expression' ||
-                                     nextChild.type === 'logical_or_expression' ||
-                                     nextChild.type === 'unary_expression')) {
-                        break;
-                    }
-                    currentChildIndex++;
-                }
-                
-                // Находим тело elsif
+                // Находим тело elsif - первый именованный узел после условия
                 let elsifBody: Node | null = null;
                 if (currentChildIndex < children.length) {
                     const nextChild = children[currentChildIndex];
-                    if (nextChild && nextChild.type === 'assignment') {
+                    if (nextChild && nextChild.isNamed) {
                         elsifBody = nextChild;
                         currentChildIndex++;
                     }
@@ -304,7 +279,7 @@ export class OSCompiler {
 
                 // Обновляем метку
                 nextConditionLabel = newNextConditionLabel;
-            } else if (child.type === 'assignment') {
+            } else if (child.isNamed && child.type !== 'relational_expression') {
                 // Это else часть - добавляем метку для else
                 this.instructions.push(new Instruction(Op.LABEL, nextConditionLabel));
                 
@@ -424,36 +399,28 @@ export class OSCompiler {
 
     visitFor_loop(node: Node) {
         // node.type === "for_loop"
-        // Структура: For variable = start to end Do ... EndFor
+        // Структура по tree-sitter: identifier, =, start_expr, end_expr, assignment, ;
         const children = node.children;
         
-        // Узел for_loop имеет 6 детей:
-        // 0: identifier (переменная цикла)
-        // 1: = (присваивание)
-        // 2: number (начальное значение)
-        // 3: number (конечное значение)
-        // 4: assignment (тело цикла)
-        // 5: ; (разделитель)
-        
-        if (children.length < 6) {
+        if (children.length < 5) {
             throw new Error(`Некорректный for_loop: ${node.toString()}`);
         }
         
         const variableNode = children[0]; // identifier
-        const startNode = children[2];    // number (начальное значение)
-        const endNode = children[3];      // number (конечное значение)
-        const bodyNodes = new Array();    // Тело цикла
-
-        for (let childCounter = 0; childCounter < children.length; childCounter++) {
-            let child = children[childCounter];
-
-            if (child?.isNamed) {
-                bodyNodes.push(child)
-            }
-        }
+        const startNode = children[2];    // выражение (начальное значение)
+        const endNode = children[3];      // выражение (конечное значение)
         
         if (!variableNode || !startNode || !endNode) {
             throw new Error(`Некорректный for_loop: ${node.toString()}`);
+        }
+        
+        // Ищем тело цикла (assignment или другие statements)
+        const bodyNodes: Node[] = [];
+        for (let i = 4; i < children.length; i++) {
+            const child = children[i];
+            if (child && child.isNamed && child.type !== '_code_block') {
+                bodyNodes.push(child);
+            }
         }
         
         // Генерируем инструкции для цикла for
@@ -484,7 +451,7 @@ export class OSCompiler {
         this.instructions.push(new Instruction(Op.JUMP_IF_FALSE, loopEndLabel));
         
         // Тело цикла
-        for (let child of bodyNodes){
+        for (const child of bodyNodes) {
             this.visit(child);
         }
         
@@ -512,12 +479,18 @@ export class OSCompiler {
     }
 
     visitBreak_statement(node: Node) {
-        // Генерируем инструкцию break
-        this.instructions.push(new Instruction(Op.BREAK));
+        // Генерируем инструкцию break с меткой конца текущего цикла
+        if (this.breakTargets.length === 0) {
+            throw new Error('Прервать вне цикла');
+        }
+        this.instructions.push(new Instruction(Op.BREAK, this.breakTargets[this.breakTargets.length - 1]));
     }
 
     visitContinue_statement(node: Node) {
-        // Генерируем инструкцию continue
-        this.instructions.push(new Instruction(Op.CONTINUE));
+        // Генерируем инструкцию continue с меткой продолжения текущего цикла
+        if (this.continueTargets.length === 0) {
+            throw new Error('Продолжить вне цикла');
+        }
+        this.instructions.push(new Instruction(Op.CONTINUE, this.continueTargets[this.continueTargets.length - 1]));
     }
 }
