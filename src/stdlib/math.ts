@@ -1,5 +1,5 @@
 import type { GlobalContext } from '../runtime/context';
-import { toNumber, typeName } from '../runtime/values';
+import { toNumber } from '../runtime/values';
 
 /** Глобальные математические и системные функции. */
 export function registerMathFunctions(ctx: GlobalContext): void {
@@ -10,5 +10,4 @@ export function registerMathFunctions(ctx: GlobalContext): void {
   ctx.register('Pow', (args) => Math.pow(toNumber(args[0]!), toNumber(args[1]!)));
   ctx.registerAlias('ТекущаяДата', 'CurrentDate', () => new Date());
   ctx.registerAlias('ТекущаяУниверсальнаяДата', 'CurrentUniversalDate', () => new Date());
-  ctx.registerAlias('ТипЗнч', 'TypeOf', (args) => typeName(args[0]!));
 }

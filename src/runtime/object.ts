@@ -10,6 +10,10 @@ export interface BslObject {
   setProp(name: string, value: Value): void;
   /** Элементы для `Для Каждого … Из …` (если коллекция). */
   iterate?: () => Value[];
+  /** Значимое равенство (по умолчанию — ссылочное). */
+  equals?: (other: BslObject) => boolean;
+  /** Строковое представление для `Строка()`. */
+  toDisplayString?: () => string;
 }
 
 /** Является ли значение рантайм-объектом BSL. */

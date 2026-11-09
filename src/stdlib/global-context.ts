@@ -7,6 +7,7 @@ import { BslStructure } from './collections/structure';
 import { registerStringFunctions } from './strings';
 import { registerMathFunctions } from './math';
 import { registerJsonFunctions } from './json';
+import { registerTypeFunctions } from './types';
 
 /** Создаёт стандартный глобальный контекст (`Сообщить`, типы и пр.). */
 export function createGlobalContext(): GlobalContext {
@@ -29,6 +30,7 @@ export function createGlobalContext(): GlobalContext {
   registerStringFunctions(ctx);
   registerMathFunctions(ctx);
   registerJsonFunctions(ctx);
+  registerTypeFunctions(ctx);
   return ctx;
 }
 

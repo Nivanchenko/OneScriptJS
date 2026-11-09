@@ -6,6 +6,7 @@
  * Точные правила приведения 1С сверяются с переносимыми тестами (T19).
  */
 
+import { isBslObject } from './object';
 import type { BslObject } from './object';
 
 export type Value = number | string | boolean | Date | null | undefined | BslObject;
@@ -44,6 +45,7 @@ export function toStringValue(value: Value): string {
   if (typeof value === 'number') return String(value);
   if (typeof value === 'boolean') return value ? 'Истина' : 'Ложь';
   if (value instanceof Date) return formatDate(value);
+  if (isBslObject(value) && value.toDisplayString) return value.toDisplayString();
   return String(value);
 }
 
@@ -89,7 +91,8 @@ export function equals(left: Value, right: Value): boolean {
   if (typeof left === 'string' && typeof right === 'string') return left === right;
   if (typeof left === 'boolean' && typeof right === 'boolean') return left === right;
   if (left instanceof Date && right instanceof Date) return left.getTime() === right.getTime();
-  if (typeof left === 'object' && typeof right === 'object' && left !== null && right !== null) {
+  if (isBslObject(left) && isBslObject(right)) {
+    if (left.equals) return left.equals(right);
     return left === right;
   }
   return false;
