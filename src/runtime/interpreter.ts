@@ -61,7 +61,11 @@ export class Interpreter {
         if (toBoolean(this.eval(stmt.condition, scope, ctx))) {
           this.execBlock(stmt.thenBranch, scope, ctx);
         } else if (stmt.elseBranch) {
-          this.execBlock(stmt.elseBranch, scope, ctx);
+          if (Array.isArray(stmt.elseBranch)) {
+            this.execBlock(stmt.elseBranch, scope, ctx);
+          } else {
+            this.exec(stmt.elseBranch, scope, ctx);
+          }
         }
         break;
       case 'ExpressionStatement':

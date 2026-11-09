@@ -76,7 +76,7 @@ export interface IfStatement extends Node {
   kind: 'IfStatement';
   condition: Expression;
   thenBranch: Statement[];
-  elseBranch: Statement[] | null;
+  elseBranch: Statement[] | IfStatement | null;
 }
 export interface ExpressionStatement extends Node {
   kind: 'ExpressionStatement';

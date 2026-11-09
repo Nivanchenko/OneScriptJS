@@ -1,11 +1,13 @@
 import { TokenType } from '../lexer/token';
 import type { Token } from '../lexer/token';
-import type { Expression, MethodParameter, Pos, Program, Statement } from '../ast/nodes';
+import type { Expression, IfStatement, MethodParameter, Pos, Program, Statement } from '../ast/nodes';
 
 // Ключевые слова распознаются регистронезависимо (RU/EN).
 const KW_IF = new Set(['если', 'if']);
 const KW_THEN = new Set(['тогда', 'then']);
 const KW_ENDIF = new Set(['конецесли', 'endif']);
+const KW_ELSIF = new Set(['иначеесли', 'elsif']);
+const KW_ELSE = new Set(['иначе', 'else']);
 const KW_AND = new Set(['и', 'and']);
 const KW_OR = new Set(['или', 'or']);
 const KW_NOT = new Set(['не', 'not']);
@@ -85,13 +87,34 @@ class Parser {
 
   private parseIf(): Statement {
     const start = this.expectKeyword(KW_IF);
-    const condition = this.parseExpression();
-    this.expectKeyword(KW_THEN);
-    const thenBranch: Statement[] = [];
-    while (!this.isEnd() && !this.isKeyword(KW_ENDIF)) thenBranch.push(this.parseStatement());
+    const node = this.parseIfBranches(start);
     this.expectKeyword(KW_ENDIF);
     this.matchEndOfStatement();
-    return { kind: 'IfStatement', pos: this.posOf(start), condition, thenBranch, elseBranch: null };
+    return node;
+  }
+
+  private parseIfBranches(start: Token): IfStatement {
+    const condition = this.parseExpression();
+    this.expectKeyword(KW_THEN);
+    const thenBranch = this.parseStatementsUntil(KW_ELSIF, KW_ELSE, KW_ENDIF);
+
+    let elseBranch: Statement[] | IfStatement | null = null;
+    if (this.isKeyword(KW_ELSIF)) {
+      const elsifStart = this.advance();
+      elseBranch = this.parseIfBranches(elsifStart);
+    } else if (this.matchKeyword(KW_ELSE)) {
+      elseBranch = this.parseStatementsUntil(KW_ENDIF);
+    }
+
+    return { kind: 'IfStatement', pos: this.posOf(start), condition, thenBranch, elseBranch };
+  }
+
+  private parseStatementsUntil(...stops: Set<string>[]): Statement[] {
+    const body: Statement[] = [];
+    while (!this.isEnd() && !stops.some((s) => this.isKeyword(s))) {
+      body.push(this.parseStatement());
+    }
+    return body;
   }
 
   private parseMethod(): Statement {
