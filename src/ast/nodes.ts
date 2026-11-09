@@ -126,6 +126,15 @@ export interface BreakStatement extends Node {
 export interface ContinueStatement extends Node {
   kind: 'ContinueStatement';
 }
+export interface TryExceptStatement extends Node {
+  kind: 'TryExceptStatement';
+  tryBody: Statement[];
+  exceptBody: Statement[];
+}
+export interface RaiseStatement extends Node {
+  kind: 'RaiseStatement';
+  value: Expression;
+}
 
 export type Statement =
   | Assignment
@@ -138,7 +147,9 @@ export type Statement =
   | WhileLoop
   | ForEachLoop
   | BreakStatement
-  | ContinueStatement;
+  | ContinueStatement
+  | TryExceptStatement
+  | RaiseStatement;
 
 export interface Program extends Node {
   kind: 'Program';

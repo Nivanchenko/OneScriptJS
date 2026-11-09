@@ -28,6 +28,10 @@ const KW_LOOP = new Set(['цикл', 'do']);
 const KW_ENDLOOP = new Set(['конеццикла', 'enddo']);
 const KW_BREAK = new Set(['прервать', 'break']);
 const KW_CONTINUE = new Set(['продолжить', 'continue']);
+const KW_TRY = new Set(['попытка', 'try']);
+const KW_EXCEPT = new Set(['исключение', 'except']);
+const KW_ENDTRY = new Set(['конецпопытки', 'endtry']);
+const KW_RAISE = new Set(['вызватьисключение', 'raise']);
 
 const COMPARISON_OPS = new Set(['=', '<>', '<', '>', '<=', '>=']);
 
@@ -62,6 +66,8 @@ class Parser {
     if (this.isKeyword(KW_WHILE)) return this.parseWhile();
     if (this.isKeyword(KW_BREAK)) return this.parseBreak();
     if (this.isKeyword(KW_CONTINUE)) return this.parseContinue();
+    if (this.isKeyword(KW_TRY)) return this.parseTry();
+    if (this.isKeyword(KW_RAISE)) return this.parseRaise();
 
     const next = this.peek(1);
     if (
@@ -212,6 +218,23 @@ class Parser {
     const start = this.advance();
     this.expectEndOfStatement();
     return { kind: 'ContinueStatement', pos: this.posOf(start) };
+  }
+
+  private parseTry(): Statement {
+    const start = this.expectKeyword(KW_TRY);
+    const tryBody = this.parseStatementsUntil(KW_EXCEPT);
+    this.expectKeyword(KW_EXCEPT);
+    const exceptBody = this.parseStatementsUntil(KW_ENDTRY);
+    this.expectKeyword(KW_ENDTRY);
+    this.matchEndOfStatement();
+    return { kind: 'TryExceptStatement', pos: this.posOf(start), tryBody, exceptBody };
+  }
+
+  private parseRaise(): Statement {
+    const start = this.advance(); // 'вызватьисключение'
+    const value = this.parseExpression();
+    this.expectEndOfStatement();
+    return { kind: 'RaiseStatement', pos: this.posOf(start), value };
   }
 
   private parseLoopBody(): Statement[] {

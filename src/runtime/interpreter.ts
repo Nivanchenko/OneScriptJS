@@ -7,11 +7,12 @@ import type {
   MethodDeclaration,
   Program,
   Statement,
+  TryExceptStatement,
   UnaryExpression,
   WhileLoop,
 } from '../ast/nodes';
 import { Scope } from './scope';
-import { add, compare, dateFromBsl, equals, toBoolean, toNumber } from './values';
+import { add, compare, dateFromBsl, equals, toBoolean, toNumber, toStringValue } from './values';
 import type { Value } from './values';
 import type { RuntimeEnvironment } from './context';
 
@@ -19,6 +20,7 @@ interface Ctx {
   methods: Map<string, MethodDeclaration>;
   moduleScope: Scope;
   moduleVars: Set<string>;
+  currentError: string | null;
 }
 
 class ReturnSignal {
@@ -26,6 +28,12 @@ class ReturnSignal {
 }
 class BreakSignal {}
 class ContinueSignal {}
+class BslRuntimeError extends Error {
+  constructor(readonly description: string) {
+    super(description);
+    this.name = 'BslRuntimeError';
+  }
+}
 
 const key = (name: string): string => name.toLowerCase();
 
@@ -34,7 +42,12 @@ export class Interpreter {
   constructor(private readonly env: RuntimeEnvironment) {}
 
   run(program: Program): void {
-    const ctx: Ctx = { methods: new Map(), moduleScope: new Scope(), moduleVars: new Set() };
+    const ctx: Ctx = {
+      methods: new Map(),
+      moduleScope: new Scope(),
+      moduleVars: new Set(),
+      currentError: null,
+    };
     for (const stmt of program.body) {
       if (stmt.kind === 'MethodDeclaration') ctx.methods.set(key(stmt.name), stmt);
       else if (stmt.kind === 'VariableDeclaration') {
@@ -89,6 +102,11 @@ export class Interpreter {
         throw new BreakSignal();
       case 'ContinueStatement':
         throw new ContinueSignal();
+      case 'TryExceptStatement':
+        this.execTryExcept(stmt, scope, ctx);
+        break;
+      case 'RaiseStatement':
+        throw new BslRuntimeError(toStringValue(this.eval(stmt.value, scope, ctx)));
     }
   }
 
@@ -132,6 +150,24 @@ export class Interpreter {
       } catch (e) {
         if (e instanceof BreakSignal) break;
         if (e instanceof ContinueSignal) continue;
+        throw e;
+      }
+    }
+  }
+
+  private execTryExcept(stmt: TryExceptStatement, scope: Scope, ctx: Ctx): void {
+    try {
+      this.execBlock(stmt.tryBody, scope, ctx);
+    } catch (e) {
+      if (e instanceof BslRuntimeError) {
+        const prev = ctx.currentError;
+        ctx.currentError = e.description;
+        try {
+          this.execBlock(stmt.exceptBody, scope, ctx);
+        } finally {
+          ctx.currentError = prev;
+        }
+      } else {
         throw e;
       }
     }
@@ -212,7 +248,13 @@ export class Interpreter {
   }
 
   private evalCall(expr: CallExpression, scope: Scope, ctx: Ctx): Value {
-    const method = ctx.methods.get(key(expr.callee));
+    const lower = key(expr.callee);
+    // shortcut: ОписаниеОшибки живёт здесь, т.к. нужен доступ к текущему исключению;
+    // ИнформацияОбОшибке() (объект) появится в T15 вместе с обращением к свойствам.
+    if (lower === 'описаниеошибки' || lower === 'errordescription') {
+      return ctx.currentError ?? '';
+    }
+    const method = ctx.methods.get(lower);
     if (method) {
       const args = expr.args.map((a) => this.eval(a, scope, ctx));
       return this.callMethod(method, args, ctx);
