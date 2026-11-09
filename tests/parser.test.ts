@@ -11,7 +11,7 @@ describe('парсер', () => {
     const stmt = parseExpr('имя = "Никита"');
     expect(stmt).toMatchObject({
       kind: 'Assignment',
-      target: 'имя',
+      target: { kind: 'Identifier', name: 'имя' },
       value: { kind: 'StringLiteral', value: 'Никита' },
     });
   });
@@ -20,7 +20,7 @@ describe('парсер', () => {
     const stmt = parseExpr('возраст = 38');
     expect(stmt).toMatchObject({
       kind: 'Assignment',
-      target: 'возраст',
+      target: { kind: 'Identifier', name: 'возраст' },
       value: { kind: 'NumberLiteral', value: 38 },
     });
   });
@@ -31,7 +31,7 @@ describe('парсер', () => {
       kind: 'ExpressionStatement',
       expression: {
         kind: 'CallExpression',
-        callee: 'сообщить',
+        callee: { kind: 'Identifier', name: 'сообщить' },
         args: [{ kind: 'StringLiteral', value: 'Привет' }],
       },
     });

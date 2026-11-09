@@ -4,6 +4,9 @@ import type {
   Expression,
   ForEachLoop,
   ForLoop,
+  IndexExpression,
+  LValue,
+  MemberExpression,
   MethodDeclaration,
   Program,
   Statement,
@@ -12,9 +15,10 @@ import type {
   WhileLoop,
 } from '../ast/nodes';
 import { Scope } from './scope';
-import { add, compare, dateFromBsl, equals, toBoolean, toNumber, toStringValue } from './values';
+import { add, compare, dateFromBsl, equals, toBoolean, toNumber, toStringValue, typeName } from './values';
 import type { Value } from './values';
 import type { RuntimeEnvironment } from './context';
+import { isBslObject } from './object';
 
 interface Ctx {
   methods: Map<string, MethodDeclaration>;
@@ -52,7 +56,13 @@ export class Interpreter {
       moduleVars: new Set(),
       currentError: null,
     };
-    return new Interpreter({ call: () => undefined }).eval(expr, ctx.moduleScope, ctx);
+    const env: RuntimeEnvironment = {
+      call: () => undefined,
+      construct: (typeName) => {
+        throw new Error(`Тип '${typeName}' не найден`);
+      },
+    };
+    return new Interpreter(env).eval(expr, ctx.moduleScope, ctx);
   }
 
   run(program: Program): void {
@@ -106,7 +116,7 @@ export class Interpreter {
   private exec(stmt: Statement, scope: Scope, ctx: Ctx): void {
     switch (stmt.kind) {
       case 'Assignment':
-        this.setVariable(stmt.target, this.eval(stmt.value, scope, ctx), scope, ctx);
+        this.assign(stmt.target, this.eval(stmt.value, scope, ctx), scope, ctx);
         break;
       case 'IfStatement':
         if (toBoolean(this.eval(stmt.condition, scope, ctx))) {
@@ -181,11 +191,10 @@ export class Interpreter {
 
   private execForEachLoop(stmt: ForEachLoop, scope: Scope, ctx: Ctx): void {
     const collection = this.eval(stmt.collection, scope, ctx);
-    // shortcut: коллекции (Массив) появятся в T15; пока итерируем только JS-массивы.
-    if (!Array.isArray(collection)) {
+    if (!isBslObject(collection) || !collection.iterate) {
       throw new Error('Для Каждого: значение не является коллекцией');
     }
-    for (const item of collection as unknown as Value[]) {
+    for (const item of collection.iterate()) {
       this.setVariable(stmt.variable, item, scope, ctx);
       try {
         this.execBlock(stmt.body, scope, ctx);
@@ -235,13 +244,16 @@ export class Interpreter {
         return this.evalUnary(expr, scope, ctx);
       case 'CallExpression':
         return this.evalCall(expr, scope, ctx);
+      case 'MemberExpression':
+        return this.evalMember(expr, scope, ctx);
+      case 'IndexExpression':
+        return this.evalIndex(expr, scope, ctx);
       case 'TernaryExpression':
         return toBoolean(this.eval(expr.condition, scope, ctx))
           ? this.eval(expr.then, scope, ctx)
           : this.eval(expr.else, scope, ctx);
       case 'NewObjectExpression':
-        // shortcut: реестр типов появится в T15.
-        throw new Error(`Тип '${expr.typeName}' не найден (появится в T15)`);
+        return this.env.construct(expr.typeName, expr.args.map((a) => this.eval(a, scope, ctx)));
     }
   }
 
@@ -299,18 +311,45 @@ export class Interpreter {
   }
 
   private evalCall(expr: CallExpression, scope: Scope, ctx: Ctx): Value {
-    const lower = key(expr.callee);
-    // shortcut: ОписаниеОшибки живёт здесь, т.к. нужен доступ к текущему исключению;
-    // ИнформацияОбОшибке() (объект) появится в T15 вместе с обращением к свойствам.
-    if (lower === 'описаниеошибки' || lower === 'errordescription') {
-      return ctx.currentError ?? '';
+    const args = expr.args.map((a) => this.eval(a, scope, ctx));
+
+    if (expr.callee.kind === 'Identifier') {
+      const lower = key(expr.callee.name);
+      // shortcut: ОписаниеОшибки живёт здесь, т.к. нужен доступ к текущему исключению.
+      if (lower === 'описаниеошибки' || lower === 'errordescription') {
+        return ctx.currentError ?? '';
+      }
+      const method = ctx.methods.get(lower);
+      if (method) return this.callMethod(method, args, ctx);
+      return this.env.call(expr.callee.name, args);
     }
-    const method = ctx.methods.get(lower);
-    if (method) {
-      const args = expr.args.map((a) => this.eval(a, scope, ctx));
-      return this.callMethod(method, args, ctx);
+
+    if (expr.callee.kind === 'MemberExpression') {
+      const obj = this.eval(expr.callee.object, scope, ctx);
+      if (!isBslObject(obj)) {
+        throw new Error(`Метод '${expr.callee.property}' недоступен для ${typeName(obj)}`);
+      }
+      return obj.callMethod(expr.callee.property, args);
     }
-    return this.env.call(expr.callee, expr.args.map((a) => this.eval(a, scope, ctx)));
+
+    throw new Error('Недопустимый вызов функции');
+  }
+
+  private evalMember(expr: MemberExpression, scope: Scope, ctx: Ctx): Value {
+    const obj = this.eval(expr.object, scope, ctx);
+    if (!isBslObject(obj)) {
+      throw new Error(`Свойство '${expr.property}' недоступно для ${typeName(obj)}`);
+    }
+    return obj.getProp(expr.property);
+  }
+
+  private evalIndex(expr: IndexExpression, scope: Scope, ctx: Ctx): Value {
+    const obj = this.eval(expr.object, scope, ctx);
+    const index = this.eval(expr.index, scope, ctx);
+    if (!isBslObject(obj)) {
+      throw new Error(`Индексация недоступна для ${typeName(obj)}`);
+    }
+    return obj.getIndex(index);
   }
 
   private callMethod(method: MethodDeclaration, args: Value[], ctx: Ctx): Value {
@@ -332,5 +371,20 @@ export class Interpreter {
   private setVariable(name: string, value: Value, scope: Scope, ctx: Ctx): void {
     if (ctx.moduleVars.has(key(name))) ctx.moduleScope.set(name, value);
     else scope.set(name, value);
+  }
+
+  private assign(target: LValue, value: Value, scope: Scope, ctx: Ctx): void {
+    if (target.kind === 'Identifier') {
+      this.setVariable(target.name, value, scope, ctx);
+    } else if (target.kind === 'IndexExpression') {
+      const obj = this.eval(target.object, scope, ctx);
+      const index = this.eval(target.index, scope, ctx);
+      if (!isBslObject(obj)) throw new Error(`Индексация недоступна для ${typeName(obj)}`);
+      obj.setIndex(index, value);
+    } else {
+      const obj = this.eval(target.object, scope, ctx);
+      if (!isBslObject(obj)) throw new Error(`Свойство '${target.property}' недоступно для ${typeName(obj)}`);
+      obj.setProp(target.property, value);
+    }
   }
 }

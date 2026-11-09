@@ -49,8 +49,18 @@ export interface UnaryExpression extends Node {
 }
 export interface CallExpression extends Node {
   kind: 'CallExpression';
-  callee: string;
+  callee: Expression;
   args: Expression[];
+}
+export interface MemberExpression extends Node {
+  kind: 'MemberExpression';
+  object: Expression;
+  property: string;
+}
+export interface IndexExpression extends Node {
+  kind: 'IndexExpression';
+  object: Expression;
+  index: Expression;
 }
 export interface TernaryExpression extends Node {
   kind: 'TernaryExpression';
@@ -75,14 +85,18 @@ export type Expression =
   | BinaryExpression
   | UnaryExpression
   | CallExpression
+  | MemberExpression
+  | IndexExpression
   | TernaryExpression
   | NewObjectExpression;
 
 // --- Операторы ---
 
+export type LValue = Identifier | MemberExpression | IndexExpression;
+
 export interface Assignment extends Node {
   kind: 'Assignment';
-  target: string;
+  target: LValue;
   value: Expression;
 }
 export interface IfStatement extends Node {

@@ -16,6 +16,9 @@ function run(source: string): string[] {
       }
       throw new Error(`Неизвестная функция: ${name}`);
     },
+    construct(typeName) {
+      throw new Error(`Тип '${typeName}' не найден`);
+    },
   };
   new Interpreter(env).run(parse(tokenize(source)));
   return messages;

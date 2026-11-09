@@ -1,6 +1,6 @@
 import { TokenType } from '../lexer/token';
 import type { Token } from '../lexer/token';
-import type { Expression, IfStatement, MethodParameter, Pos, Program, Statement } from '../ast/nodes';
+import type { Expression, IfStatement, LValue, MethodParameter, Pos, Program, Statement } from '../ast/nodes';
 
 // Ключевые слова распознаются регистронезависимо (RU/EN).
 const KW_IF = new Set(['если', 'if']);
@@ -42,6 +42,10 @@ export function parse(tokens: Token[]): Program {
   return new Parser(tokens).parse();
 }
 
+function isLValue(expr: Expression): expr is LValue {
+  return expr.kind === 'Identifier' || expr.kind === 'MemberExpression' || expr.kind === 'IndexExpression';
+}
+
 class Parser {
   private current = 0;
   private readonly eof: Token;
@@ -75,26 +79,20 @@ class Parser {
     if (this.isKeyword(KW_GOTO)) return this.parseGoto();
     if (this.checkOp('~')) return this.parseLabel();
 
-    const next = this.peek(1);
-    if (
-      this.peek().type === TokenType.Identifier &&
-      next.type === TokenType.Operator &&
-      next.lexeme === '='
-    ) {
-      return this.parseAssignment();
+    const save = this.current;
+    const left = this.parseUnary();
+    if (this.checkOp('=') && isLValue(left)) {
+      this.advance(); // '='
+      const value = this.parseExpression();
+      this.expectEndOfStatement();
+      return { kind: 'Assignment', pos: left.pos, target: left, value };
     }
 
+    // не присваивание — откат и разбор полного выражения
+    this.current = save;
     const expr = this.parseExpression();
     this.expectEndOfStatement();
     return { kind: 'ExpressionStatement', pos: expr.pos, expression: expr };
-  }
-
-  private parseAssignment(): Statement {
-    const target = this.advance();
-    this.advance(); // '='
-    const value = this.parseExpression();
-    this.expectEndOfStatement();
-    return { kind: 'Assignment', pos: this.posOf(target), target: target.lexeme, value };
   }
 
   private parseIf(): Statement {
@@ -348,7 +346,7 @@ class Parser {
       const op = this.advance();
       return { kind: 'UnaryExpression', pos: this.posOf(op), operator: 'не', operand: this.parseUnary() };
     }
-    return this.parsePrimary();
+    return this.parsePostfix();
   }
 
   private parsePrimary(): Expression {
@@ -374,9 +372,6 @@ class Parser {
         return { kind: 'UndefinedLiteral', pos: this.posOf(token) };
       case TokenType.Identifier:
         if (this.isKeyword(KW_NEW)) return this.parseNew();
-        if (this.peek(1).type === TokenType.Operator && this.peek(1).lexeme === '(') {
-          return this.parseCall();
-        }
         this.advance();
         return { kind: 'Identifier', pos: this.posOf(token), name: token.lexeme };
       case TokenType.Operator:
@@ -396,8 +391,28 @@ class Parser {
     this.error(`неожиданный токен '${token.lexeme}'`);
   }
 
-  private parseCall(): Expression {
-    const name = this.advance(); // Identifier
+  private parsePostfix(): Expression {
+    let expr = this.parsePrimary();
+    for (;;) {
+      if (this.checkOp('(')) {
+        expr = this.parseCallArgs(expr);
+      } else if (this.checkOp('[')) {
+        this.advance();
+        const index = this.parseExpression();
+        this.expectOp(']');
+        expr = { kind: 'IndexExpression', pos: expr.pos, object: expr, index };
+      } else if (this.checkOp('.')) {
+        this.advance();
+        const property = this.expectIdentifier().lexeme;
+        expr = { kind: 'MemberExpression', pos: expr.pos, object: expr, property };
+      } else {
+        break;
+      }
+    }
+    return expr;
+  }
+
+  private parseCallArgs(callee: Expression): Expression {
     this.expectOp('(');
     const args: Expression[] = [];
     if (!this.checkOp(')')) {
@@ -406,7 +421,7 @@ class Parser {
       } while (this.matchOp(','));
     }
     this.expectOp(')');
-    return { kind: 'CallExpression', pos: this.posOf(name), callee: name.lexeme, args };
+    return { kind: 'CallExpression', pos: callee.pos, callee, args };
   }
 
   private parseTernary(): Expression {
