@@ -1,0 +1,5 @@
+# Настройки pnpm v11. Разрешаем postinstall-скрипт esbuild —
+# он валидирует/доустанавливает нативный бинарник.
+# В v11 build-настройки объединены в карту `allowBuilds`.
+allowBuilds:
+  esbuild: true
