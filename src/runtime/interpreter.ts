@@ -47,6 +47,8 @@ const key = (name: string): string => name.toLowerCase();
 
 /** Tree-walking интерпретатор BSL. */
 export class Interpreter {
+  private moduleCtx: Ctx | null = null;
+
   constructor(private readonly env: RuntimeEnvironment) {}
 
   /** Оценивает константное выражение (для препроцессора). */
@@ -84,6 +86,28 @@ export class Interpreter {
       (s) => s.kind !== 'MethodDeclaration' && s.kind !== 'VariableDeclaration',
     );
     this.execGotoBlock(executable, ctx.moduleScope, ctx);
+    this.moduleCtx = ctx;
+  }
+
+  /** Вызывает метод модуля по имени с готовыми значениями (для тестового раннера). */
+  invokeMethod(name: string, values: Value[]): Value {
+    const ctx = this.moduleCtx;
+    if (!ctx) throw new Error('Модуль ещё не выполнен');
+    const method = ctx.methods.get(key(name));
+    if (!method) throw new Error(`Метод '${name}' не найден`);
+    const localScope = new Scope(ctx.moduleScope);
+    method.params.forEach((p, i) => {
+      const value =
+        i < values.length ? values[i] : p.defaultValue ? this.eval(p.defaultValue, ctx.moduleScope, ctx) : undefined;
+      localScope.set(p.name, value);
+    });
+    try {
+      this.execGotoBlock(method.body, localScope, ctx);
+    } catch (e) {
+      if (e instanceof ReturnSignal) return e.value;
+      throw e;
+    }
+    return undefined;
   }
 
   private execBlock(body: Statement[], scope: Scope, ctx: Ctx): void {
