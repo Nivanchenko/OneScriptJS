@@ -148,6 +148,14 @@ export interface RaiseStatement extends Node {
   kind: 'RaiseStatement';
   value: Expression;
 }
+export interface LabelStatement extends Node {
+  kind: 'LabelStatement';
+  name: string;
+}
+export interface GotoStatement extends Node {
+  kind: 'GotoStatement';
+  label: string;
+}
 
 export type Statement =
   | Assignment
@@ -162,7 +170,9 @@ export type Statement =
   | BreakStatement
   | ContinueStatement
   | TryExceptStatement
-  | RaiseStatement;
+  | RaiseStatement
+  | LabelStatement
+  | GotoStatement;
 
 export interface Program extends Node {
   kind: 'Program';

@@ -33,6 +33,7 @@ const KW_EXCEPT = new Set(['исключение', 'except']);
 const KW_ENDTRY = new Set(['конецпопытки', 'endtry']);
 const KW_RAISE = new Set(['вызватьисключение', 'raise']);
 const KW_NEW = new Set(['новый', 'new']);
+const KW_GOTO = new Set(['перейти', 'goto']);
 
 const COMPARISON_OPS = new Set(['=', '<>', '<', '>', '<=', '>=']);
 
@@ -59,6 +60,8 @@ class Parser {
   // --- операторы ---
 
   private parseStatement(): Statement {
+    while (this.checkOp('&')) this.skipAnnotation();
+
     if (this.isKeyword(KW_IF)) return this.parseIf();
     if (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) return this.parseMethod();
     if (this.isKeyword(KW_RETURN)) return this.parseReturn();
@@ -69,6 +72,8 @@ class Parser {
     if (this.isKeyword(KW_CONTINUE)) return this.parseContinue();
     if (this.isKeyword(KW_TRY)) return this.parseTry();
     if (this.isKeyword(KW_RAISE)) return this.parseRaise();
+    if (this.isKeyword(KW_GOTO)) return this.parseGoto();
+    if (this.checkOp('~')) return this.parseLabel();
 
     const next = this.peek(1);
     if (
@@ -244,6 +249,34 @@ class Parser {
     this.expectKeyword(KW_ENDLOOP);
     this.matchEndOfStatement();
     return body;
+  }
+
+  private parseLabel(): Statement {
+    const start = this.advance(); // '~'
+    const name = this.expectIdentifier().lexeme;
+    this.expectOp(':');
+    return { kind: 'LabelStatement', pos: this.posOf(start), name };
+  }
+
+  private parseGoto(): Statement {
+    const start = this.advance(); // 'перейти'
+    this.expectOp('~');
+    const label = this.expectIdentifier().lexeme;
+    this.expectEndOfStatement();
+    return { kind: 'GotoStatement', pos: this.posOf(start), label };
+  }
+
+  private skipAnnotation(): void {
+    this.advance(); // '&'
+    this.expectIdentifier();
+    if (this.matchOp('(')) {
+      if (!this.checkOp(')')) {
+        do {
+          this.parseExpression();
+        } while (this.matchOp(','));
+      }
+      this.expectOp(')');
+    }
   }
 
   // --- выражения (по убыванию приоритета) ---

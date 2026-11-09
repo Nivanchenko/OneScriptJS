@@ -34,6 +34,9 @@ class BslRuntimeError extends Error {
     this.name = 'BslRuntimeError';
   }
 }
+class GotoSignal {
+  constructor(readonly label: string) {}
+}
 
 const key = (name: string): string => name.toLowerCase();
 
@@ -66,14 +69,38 @@ export class Interpreter {
         ctx.moduleScope.set(stmt.name, undefined);
       }
     }
-    for (const stmt of program.body) {
-      if (stmt.kind === 'MethodDeclaration' || stmt.kind === 'VariableDeclaration') continue;
-      this.exec(stmt, ctx.moduleScope, ctx);
-    }
+    const executable = program.body.filter(
+      (s) => s.kind !== 'MethodDeclaration' && s.kind !== 'VariableDeclaration',
+    );
+    this.execGotoBlock(executable, ctx.moduleScope, ctx);
   }
 
   private execBlock(body: Statement[], scope: Scope, ctx: Ctx): void {
     for (const stmt of body) this.exec(stmt, scope, ctx);
+  }
+
+  private execGotoBlock(body: Statement[], scope: Scope, ctx: Ctx): void {
+    const labels = new Map<string, number>();
+    body.forEach((s, i) => {
+      if (s.kind === 'LabelStatement') labels.set(key(s.name), i);
+    });
+
+    let i = 0;
+    while (i < body.length) {
+      const stmt = body[i]!;
+      try {
+        this.exec(stmt, scope, ctx);
+      } catch (e) {
+        if (e instanceof GotoSignal) {
+          const target = labels.get(e.label);
+          if (target === undefined) throw new Error(`Метка '~${e.label}' не найдена`);
+          i = target;
+          continue;
+        }
+        throw e;
+      }
+      i++;
+    }
   }
 
   private exec(stmt: Statement, scope: Scope, ctx: Ctx): void {
@@ -118,6 +145,10 @@ export class Interpreter {
         break;
       case 'RaiseStatement':
         throw new BslRuntimeError(toStringValue(this.eval(stmt.value, scope, ctx)));
+      case 'LabelStatement':
+        break; // маркер — no-op
+      case 'GotoStatement':
+        throw new GotoSignal(key(stmt.label));
     }
   }
 
@@ -290,7 +321,7 @@ export class Interpreter {
       localScope.set(p.name, value);
     });
     try {
-      this.execBlock(method.body, localScope, ctx);
+      this.execGotoBlock(method.body, localScope, ctx);
     } catch (e) {
       if (e instanceof ReturnSignal) return e.value;
       throw e;
