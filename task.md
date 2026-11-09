@@ -30,8 +30,6 @@
         конецесли;
 
     </one-script>
-
-    <div id="output"></div>
 </body>
 </html>
 ```
