@@ -1,16 +1,28 @@
 import { readFileSync } from 'node:fs';
-import { run } from '../runtime/runner';
-import { createGlobalContext } from '../stdlib/global-context';
+import { runScript, version } from '../index';
 
 async function main(): Promise<void> {
-  const file = process.argv[2];
-  if (!file && process.stdin.isTTY) {
+  const arg = process.argv[2];
+
+  if (arg === '--help' || arg === '-h') {
+    console.log('oscript — OneScript (BSL/1С) на TypeScript');
+    console.log('Использование: oscript <файл.os>   или   echo "..." | oscript');
+    console.log('  --help, -h      показать справку');
+    console.log('  --version, -v   показать версию');
+    return;
+  }
+  if (arg === '--version' || arg === '-v') {
+    console.log(version());
+    return;
+  }
+  if (!arg && process.stdin.isTTY) {
     console.error('Использование: oscript <файл.os>   или   echo "..." | oscript');
     process.exitCode = 2;
     return;
   }
-  const source = file ? readFileSync(file, 'utf8') : await readStdin();
-  run(source, createGlobalContext());
+
+  const source = arg ? readFileSync(arg, 'utf8') : await readStdin();
+  runScript(source);
 }
 
 function readStdin(): Promise<string> {
