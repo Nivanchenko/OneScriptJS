@@ -204,6 +204,13 @@ export class Interpreter {
         return this.evalUnary(expr, scope, ctx);
       case 'CallExpression':
         return this.evalCall(expr, scope, ctx);
+      case 'TernaryExpression':
+        return toBoolean(this.eval(expr.condition, scope, ctx))
+          ? this.eval(expr.then, scope, ctx)
+          : this.eval(expr.else, scope, ctx);
+      case 'NewObjectExpression':
+        // shortcut: реестр типов появится в T15.
+        throw new Error(`Тип '${expr.typeName}' не найден (появится в T15)`);
     }
   }
 
@@ -249,6 +256,8 @@ export class Interpreter {
   private evalUnary(expr: UnaryExpression, scope: Scope, ctx: Ctx): Value {
     const operand = this.eval(expr.operand, scope, ctx);
     switch (expr.operator) {
+      case '+':
+        return toNumber(operand);
       case '-':
         return -toNumber(operand);
       case 'не':

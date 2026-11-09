@@ -32,6 +32,7 @@ const KW_TRY = new Set(['попытка', 'try']);
 const KW_EXCEPT = new Set(['исключение', 'except']);
 const KW_ENDTRY = new Set(['конецпопытки', 'endtry']);
 const KW_RAISE = new Set(['вызватьисключение', 'raise']);
+const KW_NEW = new Set(['новый', 'new']);
 
 const COMPARISON_OPS = new Set(['=', '<>', '<', '>', '<=', '>=']);
 
@@ -302,6 +303,10 @@ class Parser {
   }
 
   private parseUnary(): Expression {
+    if (this.checkOp('+')) {
+      const op = this.advance();
+      return { kind: 'UnaryExpression', pos: this.posOf(op), operator: '+', operand: this.parseUnary() };
+    }
     if (this.checkOp('-')) {
       const op = this.advance();
       return { kind: 'UnaryExpression', pos: this.posOf(op), operator: '-', operand: this.parseUnary() };
@@ -335,6 +340,7 @@ class Parser {
         this.advance();
         return { kind: 'UndefinedLiteral', pos: this.posOf(token) };
       case TokenType.Identifier:
+        if (this.isKeyword(KW_NEW)) return this.parseNew();
         if (this.peek(1).type === TokenType.Operator && this.peek(1).lexeme === '(') {
           return this.parseCall();
         }
@@ -346,6 +352,9 @@ class Parser {
           const expr = this.parseExpression();
           this.expectOp(')');
           return expr;
+        }
+        if (token.lexeme === '?') {
+          return this.parseTernary();
         }
         break;
       default:
@@ -365,6 +374,33 @@ class Parser {
     }
     this.expectOp(')');
     return { kind: 'CallExpression', pos: this.posOf(name), callee: name.lexeme, args };
+  }
+
+  private parseTernary(): Expression {
+    const start = this.advance(); // '?'
+    this.expectOp('(');
+    const condition = this.parseExpression();
+    this.expectOp(',');
+    const thenExpr = this.parseExpression();
+    this.expectOp(',');
+    const elseExpr = this.parseExpression();
+    this.expectOp(')');
+    return { kind: 'TernaryExpression', pos: this.posOf(start), condition, then: thenExpr, else: elseExpr };
+  }
+
+  private parseNew(): Expression {
+    const start = this.advance(); // 'новый'
+    const typeName = this.expectIdentifier().lexeme;
+    const args: Expression[] = [];
+    if (this.matchOp('(')) {
+      if (!this.checkOp(')')) {
+        do {
+          args.push(this.parseExpression());
+        } while (this.matchOp(','));
+      }
+      this.expectOp(')');
+    }
+    return { kind: 'NewObjectExpression', pos: this.posOf(start), typeName, args };
   }
 
   // --- служебные ---

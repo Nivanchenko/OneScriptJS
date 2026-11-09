@@ -52,6 +52,17 @@ export interface CallExpression extends Node {
   callee: string;
   args: Expression[];
 }
+export interface TernaryExpression extends Node {
+  kind: 'TernaryExpression';
+  condition: Expression;
+  then: Expression;
+  else: Expression;
+}
+export interface NewObjectExpression extends Node {
+  kind: 'NewObjectExpression';
+  typeName: string;
+  args: Expression[];
+}
 
 export type Expression =
   | NumberLiteral
@@ -63,7 +74,9 @@ export type Expression =
   | Identifier
   | BinaryExpression
   | UnaryExpression
-  | CallExpression;
+  | CallExpression
+  | TernaryExpression
+  | NewObjectExpression;
 
 // --- Операторы ---
 
