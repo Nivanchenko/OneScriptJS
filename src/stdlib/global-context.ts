@@ -1,4 +1,5 @@
 import { GlobalContext } from '../runtime/context';
+import { BslEnumValue } from '../runtime/enum';
 import { toStringValue } from '../runtime/values';
 import type { Value } from '../runtime/values';
 import { BslArray } from './collections/array';
@@ -40,8 +41,24 @@ export function createGlobalContext(): GlobalContext {
   return ctx;
 }
 
-// shortcut: второй аргумент — статус (СтатусСообщения.*), пока игнорируется — всё → console.log.
 function message(args: Value[]): Value {
-  console.log(toStringValue(args[0] ?? ''));
+  const text = toStringValue(args[0] ?? '');
+  const status = args[1];
+  const level = status instanceof BslEnumValue ? status.name : 'Обычное';
+  switch (level) {
+    case 'Информация':
+      console.info(text);
+      break;
+    case 'Внимание':
+      console.warn(text);
+      break;
+    case 'Важное':
+    case 'ОченьВажное':
+      console.error(text);
+      break;
+    default:
+      console.log(text);
+      break;
+  }
   return undefined;
 }
