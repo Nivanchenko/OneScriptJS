@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { runScript, version } from '../index';
+import { run, version } from '../index';
+import { createNodeGlobalContext } from './context';
 
 async function main(): Promise<void> {
   const arg = process.argv[2];
@@ -22,7 +23,7 @@ async function main(): Promise<void> {
   }
 
   const source = arg ? readFileSync(arg, 'utf8') : await readStdin();
-  runScript(source);
+  run(source, createNodeGlobalContext());
 }
 
 function readStdin(): Promise<string> {
