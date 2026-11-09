@@ -28,7 +28,9 @@
     "typecheck": "tsc --noEmit",
     "build:browser": "vite build",
     "build:node": "vite build --config vite.node.config.ts && tsc -p tsconfig.build.json",
-    "build": "tsc --noEmit && vite build && vite build --config vite.node.config.ts && tsc -p tsconfig.build.json",
+    "build:cli": "vite build --config vite.cli.config.ts",
+    "build": "tsc --noEmit && vite build && vite build --config vite.node.config.ts && vite build --config vite.cli.config.ts && tsc -p tsconfig.build.json",
+    "oscript": "node dist/cli.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
