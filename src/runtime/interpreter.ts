@@ -41,6 +41,17 @@ const key = (name: string): string => name.toLowerCase();
 export class Interpreter {
   constructor(private readonly env: RuntimeEnvironment) {}
 
+  /** Оценивает константное выражение (для препроцессора). */
+  static evaluate(expr: Expression): Value {
+    const ctx: Ctx = {
+      methods: new Map(),
+      moduleScope: new Scope(),
+      moduleVars: new Set(),
+      currentError: null,
+    };
+    return new Interpreter({ call: () => undefined }).eval(expr, ctx.moduleScope, ctx);
+  }
+
   run(program: Program): void {
     const ctx: Ctx = {
       methods: new Map(),
