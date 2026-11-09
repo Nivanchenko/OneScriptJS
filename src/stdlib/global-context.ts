@@ -2,6 +2,7 @@ import { GlobalContext } from '../runtime/context';
 import { toStringValue } from '../runtime/values';
 import type { Value } from '../runtime/values';
 import { BslArray } from './collections/array';
+import { registerStringFunctions } from './strings';
 
 /** Создаёт стандартный глобальный контекст (`Сообщить`, типы и пр.). */
 export function createGlobalContext(): GlobalContext {
@@ -9,6 +10,7 @@ export function createGlobalContext(): GlobalContext {
   ctx.registerAlias('Сообщить', 'Message', message);
   ctx.registerType('Массив', (args) => new BslArray(args));
   ctx.registerType('Array', (args) => new BslArray(args));
+  registerStringFunctions(ctx);
   return ctx;
 }
 
