@@ -157,11 +157,11 @@ class Parser {
   }
 
   private parseParameter(): MethodParameter {
-    this.matchKeyword(KW_VALUE); // модификатор 'Знач' — пока игнорируется (все параметры по значению)
+    const byValue = this.matchKeyword(KW_VALUE);
     const name = this.expectIdentifier().lexeme;
     let defaultValue: Expression | undefined;
     if (this.matchOp('=')) defaultValue = this.parseExpression();
-    return { name, defaultValue };
+    return { name, byValue, defaultValue };
   }
 
   private parseReturn(): Statement {

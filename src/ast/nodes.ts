@@ -111,6 +111,7 @@ export interface ExpressionStatement extends Node {
 }
 export interface MethodParameter {
   name: string;
+  byValue: boolean;
   defaultValue?: Expression;
 }
 export interface MethodDeclaration extends Node {

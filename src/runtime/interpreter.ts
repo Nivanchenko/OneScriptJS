@@ -14,7 +14,7 @@ import type {
   UnaryExpression,
   WhileLoop,
 } from '../ast/nodes';
-import { Scope } from './scope';
+import { Ref, Scope } from './scope';
 import { add, compare, dateFromBsl, equals, toBoolean, toNumber, toStringValue, typeName } from './values';
 import type { Value } from './values';
 import type { RuntimeEnvironment } from './context';
@@ -315,8 +315,6 @@ export class Interpreter {
   }
 
   private evalCall(expr: CallExpression, scope: Scope, ctx: Ctx): Value {
-    const args = expr.args.map((a) => this.eval(a, scope, ctx));
-
     if (expr.callee.kind === 'Identifier') {
       const lower = key(expr.callee.name);
       // shortcut: ОписаниеОшибки/ИнформацияОбОшибке живут здесь — нужен доступ к текущему исключению.
@@ -327,8 +325,8 @@ export class Interpreter {
         return new BslErrorInfo(ctx.currentError ?? '');
       }
       const method = ctx.methods.get(lower);
-      if (method) return this.callMethod(method, args, ctx);
-      return this.env.call(expr.callee.name, args);
+      if (method) return this.callMethod(method, expr.args, scope, ctx);
+      return this.env.call(expr.callee.name, expr.args.map((a) => this.eval(a, scope, ctx)));
     }
 
     if (expr.callee.kind === 'MemberExpression') {
@@ -336,7 +334,7 @@ export class Interpreter {
       if (!isBslObject(obj)) {
         throw new Error(`Метод '${expr.callee.property}' недоступен для ${typeName(obj)}`);
       }
-      return obj.callMethod(expr.callee.property, args);
+      return obj.callMethod(expr.callee.property, expr.args.map((a) => this.eval(a, scope, ctx)));
     }
 
     throw new Error('Недопустимый вызов функции');
@@ -359,12 +357,21 @@ export class Interpreter {
     return obj.getIndex(index);
   }
 
-  private callMethod(method: MethodDeclaration, args: Value[], ctx: Ctx): Value {
+  private callMethod(method: MethodDeclaration, argExprs: Expression[], scope: Scope, ctx: Ctx): Value {
     const localScope = new Scope(ctx.moduleScope);
     method.params.forEach((p, i) => {
-      const value =
-        i < args.length ? args[i] : p.defaultValue ? this.eval(p.defaultValue, ctx.moduleScope, ctx) : undefined;
-      localScope.set(p.name, value);
+      const argExpr = argExprs[i];
+      if (p.byValue || argExpr === undefined) {
+        const value =
+          argExpr !== undefined
+            ? this.eval(argExpr, scope, ctx)
+            : p.defaultValue
+              ? this.eval(p.defaultValue, ctx.moduleScope, ctx)
+              : undefined;
+        localScope.set(p.name, value);
+      } else {
+        localScope.bindRef(p.name, this.resolveRef(argExpr, scope, ctx));
+      }
     });
     try {
       this.execGotoBlock(method.body, localScope, ctx);
@@ -375,7 +382,48 @@ export class Interpreter {
     return undefined;
   }
 
+  /** Разрешает выражение-аргумент в ссылку (по ссылке); для не-lvalue — временная ячейка. */
+  private resolveRef(expr: Expression, scope: Scope, ctx: Ctx): Ref {
+    if (expr.kind === 'Identifier') {
+      const name = expr.name;
+      return new Ref(
+        () => scope.get(name),
+        (v) => this.setVariable(name, v, scope, ctx),
+      );
+    }
+    if (expr.kind === 'IndexExpression') {
+      const obj = this.eval(expr.object, scope, ctx);
+      const index = this.eval(expr.index, scope, ctx);
+      if (!isBslObject(obj)) throw new Error(`Индексация недоступна для ${typeName(obj)}`);
+      return new Ref(
+        () => obj.getIndex(index),
+        (v) => obj.setIndex(index, v),
+      );
+    }
+    if (expr.kind === 'MemberExpression') {
+      const obj = this.eval(expr.object, scope, ctx);
+      if (!isBslObject(obj)) throw new Error(`Свойство '${expr.property}' недоступно для ${typeName(obj)}`);
+      return new Ref(
+        () => obj.getProp(expr.property),
+        (v) => obj.setProp(expr.property, v),
+      );
+    }
+    // выражение (не переменная): изменения отбрасываются после вызова
+    let temp = this.eval(expr, scope, ctx);
+    return new Ref(
+      () => temp,
+      (v) => {
+        temp = v;
+      },
+    );
+  }
+
   private setVariable(name: string, value: Value, scope: Scope, ctx: Ctx): void {
+    const binding = scope.findBinding(key(name));
+    if (binding instanceof Ref) {
+      binding.set(value);
+      return;
+    }
     if (ctx.moduleVars.has(key(name))) ctx.moduleScope.set(name, value);
     else scope.set(name, value);
   }
