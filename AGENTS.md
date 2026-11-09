@@ -11,8 +11,9 @@
 
 - запускаться на **Node.js** и в **браузере**;
 - подключаться в браузере как `<script src="/osConnector.js"></script>`;
-- исполнять код из кастомного элемента `<one-script>`, вывод функции
-  `сообщить()` направлять в элемент `#output` (пример — [`examples/hello.html`](examples/hello.html)).
+- исполнять код из кастомного элемента `<one-script>`; `Сообщить()` — функция
+  стандартной библиотеки, выводит в JavaScript `console.log` (пример —
+  [`examples/hello.html`](examples/hello.html)).
 
 Оригинал на C# лежит в **`reference/OneScript/`** (игнорируется git-ом, см.
 `.gitignore`). Это справочный исходник, а не код нашего репозитория — его **не
@@ -163,6 +164,7 @@ OneScriptJS/
 
 - [`task.md`](task.md) — исходное ТЗ и приёмочный HTML-пример.
 - [`docs/architecture.md`](docs/architecture.md) — карта слоёв и статус переноса.
+- [`docs/plan.md`](docs/plan.md) — план задач (фазы T1–T20, порядок и приёмка).
 - `reference/OneScript/AGENTS.md` — инструкции к оригиналу (для справки).
 - `reference/OneScript/docs/developer_docs.md` — архитектура C#-движка.
 - `reference/OneScript/docs/contexts.md` — как устроены контексты/методы BSL.

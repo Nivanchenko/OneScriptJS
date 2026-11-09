@@ -1,8 +1,8 @@
 /**
  * Браузерная точка входа. Регистрирует кастомный элемент <one-script>,
- * который выполняет BSL-код из своего содержимого и пишет вывод
- * функции сообщить() в элемент #output.
+ * который выполняет BSL-код из своего содержимого.
  *
+ * Вывод `Сообщить()` идёт через стандартную библиотеку в `console.log`.
  * Подключается как <script src="/osConnector.js"></script>.
  * Полноценный запуск движка появится в задачах разработки.
  */
@@ -13,17 +13,10 @@ const ONE_SCRIPT_TAG = 'one-script';
 class OneScriptElement extends HTMLElement {
   connectedCallback(): void {
     const code = this.textContent ?? '';
-    const note = `OneScriptJS v${version()}: движок ещё не реализован (код: ${code.length} симв.)`;
-    const output = document.getElementById('output');
-
-    if (output) {
-      const line = document.createElement('div');
-      line.textContent = note;
-      output.appendChild(line);
-    } else {
-      // eslint-disable-next-line no-console
-      console.log(note);
-    }
+    // Плейсхолдер: реальный запуск движка появится в задачах разработки.
+    console.log(
+      `OneScriptJS v${version()}: движок ещё не реализован (код: ${code.length} симв.)`,
+    );
   }
 }
 
