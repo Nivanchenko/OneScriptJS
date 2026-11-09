@@ -109,9 +109,9 @@ export function dateFromBsl(value: string): Date {
   return new Date(Date.UTC(y, m, d, hh, mm, ss));
 }
 
-// shortcut: минимальный формат `ДД.ММ.ГГГГ ЧЧ:ММ:СС`, уточнить в T16 (правила 1С).
+// Формат 1С: `ДД.ММ.ГГГГ Ч:ММ:СС` (час без ведущего нуля).
 function formatDate(d: Date): string {
   const p = (n: number): string => String(n).padStart(2, '0');
   return `${p(d.getUTCDate())}.${p(d.getUTCMonth() + 1)}.${d.getUTCFullYear()} ` +
-    `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+    `${d.getUTCHours()}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
 }

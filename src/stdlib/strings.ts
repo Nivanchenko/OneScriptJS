@@ -1,4 +1,5 @@
 import type { GlobalContext } from '../runtime/context';
+import { BslEnumValue } from '../runtime/enum';
 import { isBslObject } from '../runtime/object';
 import { toNumber, toStringValue } from '../runtime/values';
 import type { Value } from '../runtime/values';
@@ -65,12 +66,62 @@ export function registerStringFunctions(ctx: GlobalContext): void {
   ctx.registerAlias('ТРег', 'Title', (args) => titleCase(s(args, 0)));
   ctx.registerAlias('СтрЧислоСтрок', 'StrLineCount', (args) => s(args, 0).split('\n').length);
   ctx.registerAlias('СтрПолучитьСтроку', 'StrGetLine', (args) => s(args, 0).split('\n')[n(args, 1) - 1] ?? '');
-  ctx.registerAlias('СтрНайти', 'StrFind', (args) => s(args, 0).indexOf(s(args, 1)) + 1);
+  ctx.registerAlias('СтрНайти', 'StrFind', (args) => strFind(args));
   ctx.registerAlias('СтрШаблон', 'StrTemplate', (args) => strTemplate(args));
 }
 
 function titleCase(str: string): string {
   return str.replace(/[а-яёa-z]+/gi, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
+function isFromEnd(value: Value | undefined): boolean {
+  if (value === undefined) return false;
+  if (value instanceof BslEnumValue) return value.name === 'СКонца';
+  const s = toStringValue(value).toLowerCase();
+  return s === 'сконца' || s === 'fromend';
+}
+
+function strFind(args: Value[]): number {
+  const haystack = s(args, 0);
+  const needle = s(args, 1);
+  if (needle === '') return 1;
+  const len = haystack.length;
+  if (len === 0) return 0;
+
+  const fromBegin = !(args[2] !== undefined && isFromEnd(args[2]));
+  let startPos = args[3] !== undefined ? n(args, 3) : 0;
+  const occurance = args[4] !== undefined ? n(args, 4) : 1;
+
+  if (startPos === 0) startPos = fromBegin ? 1 : len;
+  else if (startPos < 1 || startPos > len) throw new Error('Недопустимое значение начальной позиции');
+  if (occurance < 0) return 0;
+  else if (occurance === 0) throw new Error('Недопустимое значение номера вхождения');
+
+  let startIndex = startPos - 1;
+  let foundTimes = 0;
+  let index = len + 1;
+
+  if (fromBegin) {
+    while (foundTimes < occurance && index >= 0) {
+      index = haystack.indexOf(needle, startIndex);
+      if (index >= 0) {
+        startIndex = index + 1;
+        foundTimes++;
+      }
+      if (startIndex >= len) break;
+    }
+  } else {
+    while (foundTimes < occurance && index >= 0) {
+      index = haystack.lastIndexOf(needle, startIndex);
+      if (index >= 0) {
+        startIndex = index - 1;
+        foundTimes++;
+      }
+      if (startIndex < 0) break;
+    }
+  }
+
+  return foundTimes === occurance ? index + 1 : 0;
 }
 
 function strTemplate(args: Value[]): string {

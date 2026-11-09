@@ -9,6 +9,8 @@ import { registerMathFunctions } from './math';
 import { registerJsonFunctions } from './json';
 import { registerTypeFunctions } from './types';
 import { registerBitFunctions } from './bitwise';
+import { registerEnums } from './enums';
+import { registerFormatFunction } from './format';
 
 /** Создаёт стандартный глобальный контекст (`Сообщить`, типы и пр.). */
 export function createGlobalContext(): GlobalContext {
@@ -33,6 +35,8 @@ export function createGlobalContext(): GlobalContext {
   registerJsonFunctions(ctx);
   registerTypeFunctions(ctx);
   registerBitFunctions(ctx);
+  registerEnums(ctx);
+  registerFormatFunction(ctx);
   return ctx;
 }
 

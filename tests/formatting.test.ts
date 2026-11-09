@@ -1,0 +1,49 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { run } from '../src/runtime/runner';
+import { createGlobalContext } from '../src/stdlib/global-context';
+
+function exec(source: string): unknown[] {
+  const logs: unknown[] = [];
+  const spy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+    logs.push(...args);
+  });
+  try {
+    run(source, createGlobalContext());
+  } finally {
+    spy.mockRestore();
+  }
+  return logs;
+}
+
+describe('форматирование: Строка(Дата), СтрНайти, Формат', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('Строка(Дата) — ДД.ММ.ГГГГ Ч:ММ:СС', () => {
+    expect(exec("сообщить(Строка('20260101'));")).toEqual(['01.01.2026 0:00:00']);
+    expect(exec("сообщить(Строка('20260101153045'));")).toEqual(['01.01.2026 15:30:45']);
+  });
+
+  it('СтрНайти: базовый и «не найдено»', () => {
+    expect(exec('сообщить(СтрНайти("Привет", "и")); сообщить(СтрНайти("abc", "z"));')).toEqual(['3', '0']);
+  });
+
+  it('СтрНайти: направление СКонца', () => {
+    expect(exec('сообщить(СтрНайти("абракадабра", "а", НаправлениеПоиска.СКонца));')).toEqual(['11']);
+  });
+
+  it('СтрНайти: второе вхождение с начала', () => {
+    expect(exec('сообщить(СтрНайти("абракадабра", "а", НаправлениеПоиска.СНачала, 1, 2));')).toEqual(['4']);
+  });
+
+  it('Формат по умолчанию', () => {
+    expect(exec('сообщить(Формат(123.456));')).toEqual(['123.456']);
+  });
+
+  it('Формат числа с ЧДЦ', () => {
+    expect(exec('сообщить(Формат(123.456, "ЧДЦ=2"));')).toEqual(['123.46']);
+  });
+
+  it('Формат булево БИ/БЛ', () => {
+    expect(exec('сообщить(Формат(Истина, "БИ=\'Да\'; БЛ=\'Нет\'"));')).toEqual(['Да']);
+  });
+});

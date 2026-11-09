@@ -264,8 +264,11 @@ export class Interpreter {
         return null;
       case 'UndefinedLiteral':
         return undefined;
-      case 'Identifier':
-        return scope.get(expr.name);
+      case 'Identifier': {
+        const value = scope.get(expr.name);
+        if (value !== undefined) return value;
+        return this.env.resolveGlobal?.(expr.name) ?? undefined;
+      }
       case 'BinaryExpression':
         return this.evalBinary(expr, scope, ctx);
       case 'UnaryExpression':
