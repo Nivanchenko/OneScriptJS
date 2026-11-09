@@ -59,7 +59,11 @@ export class BslStructure implements BslObject {
   }
 
   getProp(name: string): Value {
-    return this.entries.get(name.toLowerCase());
+    const key = name.toLowerCase();
+    if (!this.entries.has(key)) {
+      throw new Error(`Поле объекта не обнаружено: '${name}'`);
+    }
+    return this.entries.get(key);
   }
 
   setProp(name: string, value: Value): void {
