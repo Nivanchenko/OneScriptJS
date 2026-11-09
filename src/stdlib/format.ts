@@ -3,9 +3,9 @@ import { toStringValue } from '../runtime/values';
 import type { Value } from '../runtime/values';
 
 /**
- * Глобальная функция `Формат`. Подмножество формата 1С:
- * булево (`БИ`/`БЛ`), число (`ЧЦ`, `ЧДЦ`, `ЧН`), дата (`ДФ`).
- * Отложено: `ЧГ` (группировка), `ЧРД`/`ЧРГ` (разделители), `Л` (локаль), `ЧВН`, `ЧО`.
+ * Глобальная функция `Формат`. Покрывает формат 1С:
+ * булево (`БИ`/`БЛ`), число (`ЧЦ`, `ЧДЦ`, `ЧН`, `ЧГ`, `ЧРД`, `ЧРГ`, `ЧВН`, `ЧО`, `Л`),
+ * дата (`ДФ`, `ДЛФ`). Отложено: `ДП` (пустая дата), длинный формат даты `ДД`.
  */
 export function registerFormatFunction(ctx: GlobalContext): void {
   ctx.registerAlias('Формат', 'Format', (args) => format(args));
@@ -28,6 +28,8 @@ function format(args: Value[]): Value {
   if (value instanceof Date) {
     const df = matchParam(fs, 'ДФ');
     if (df !== null && df !== '') return formatDateCustom(value, df);
+    const dlf = matchParam(fs, 'ДЛФ');
+    if (dlf !== null && dlf !== '') return formatDateCustom(value, localDatePattern(dlf));
   }
 
   return toStringValue(value ?? '');
@@ -57,12 +59,45 @@ function roundHalfAway(value: number, digits: number): number {
   return Math.round(scaled + Number.EPSILON * Math.abs(scaled)) / factor;
 }
 
+function isRuLocale(locale: string | null): boolean {
+  return locale !== null && /^ru/i.test(locale);
+}
+
+function groupDigits(digits: string, sep: string): string {
+  let result = '';
+  while (digits.length > 3) {
+    result = sep + digits.slice(-3) + result;
+    digits = digits.slice(0, -3);
+  }
+  return digits + result;
+}
+
+function applyNegativePattern(n: string, pattern: number): string {
+  switch (pattern) {
+    case 0: return `(${n})`;
+    case 2: return `- ${n}`;
+    case 3: return `${n}-`;
+    case 4: return `${n} -`;
+    default: return `-${n}`;
+  }
+}
+
 function formatNumber(value: number, fs: string): string {
   const zero = matchParam(fs, 'ЧН');
   if (value === 0 && zero !== null) return zero;
 
   const decimals = matchInt(fs, 'ЧДЦ');
   const total = matchInt(fs, 'ЧЦ');
+  const locale = matchParam(fs, 'Л');
+  const fracSep = matchParam(fs, 'ЧРД');
+  const groupSep = matchParam(fs, 'ЧРГ');
+  const groupingParam = matchParam(fs, 'ЧГ');
+  const hasLeadingZero = matchParam(fs, 'ЧВН') !== null;
+  const negPattern = matchInt(fs, 'ЧО');
+
+  const dec = fracSep !== null && fracSep !== '' ? fracSep[0]! : isRuLocale(locale) ? ',' : '.';
+  const grp = groupSep !== null && groupSep !== '' ? groupSep[0]! : isRuLocale(locale) ? '\u00A0' : ',';
+  const grouping = groupingParam !== '0';
 
   const neg = value < 0;
   const abs = Math.abs(value);
@@ -71,17 +106,36 @@ function formatNumber(value: number, fs: string): string {
 
   if (total !== null && total > 0) {
     const targetInt = total - (decimals ?? 0);
-    if (intPart!.length > targetInt) {
-      // переполнение разрядности — показываем 9-ки (как в 1С)
-      intPart = '9'.repeat(Math.max(targetInt, 0));
+    if (targetInt <= 0) {
+      intPart = '';
       if ((decimals ?? 0) > 0) fracPart = '9'.repeat(decimals!);
+    } else if (intPart!.length > targetInt) {
+      intPart = '9'.repeat(targetInt);
+      if ((decimals ?? 0) > 0) fracPart = '9'.repeat(decimals!);
+    } else if (hasLeadingZero && intPart!.length < targetInt) {
+      intPart = intPart!.padStart(targetInt, '0');
     }
   }
 
+  if (grouping && intPart!.length > 3) {
+    intPart = groupDigits(intPart!, grp);
+  }
+
   let result = intPart!;
-  if (fracPart !== undefined) result += '.' + fracPart;
-  if (neg && result !== '0' && result !== '') result = '-' + result;
+  if (fracPart !== undefined) result += dec + fracPart;
+
+  if (neg) result = applyNegativePattern(result, negPattern ?? 1);
+
   return result;
+}
+
+function localDatePattern(code: string): string {
+  switch (code.toLowerCase()) {
+    case 'д': case 'd': return 'dd.MM.yyyy';
+    case 'в': case 't': return 'HH:mm:ss';
+    case 'дв': case 'dt': return 'dd.MM.yyyy HH:mm:ss';
+    default: return 'dd.MM.yyyy';
+  }
 }
 
 function formatDateCustom(d: Date, pattern: string): string {
