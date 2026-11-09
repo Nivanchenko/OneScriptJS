@@ -19,6 +19,7 @@ import { add, compare, dateFromBsl, equals, toBoolean, toNumber, toStringValue, 
 import type { Value } from './values';
 import type { RuntimeEnvironment } from './context';
 import { isBslObject } from './object';
+import { BslErrorInfo } from './error-info';
 
 interface Ctx {
   methods: Map<string, MethodDeclaration>;
@@ -153,8 +154,11 @@ export class Interpreter {
       case 'TryExceptStatement':
         this.execTryExcept(stmt, scope, ctx);
         break;
-      case 'RaiseStatement':
-        throw new BslRuntimeError(toStringValue(this.eval(stmt.value, scope, ctx)));
+      case 'RaiseStatement': {
+        const value = this.eval(stmt.value, scope, ctx);
+        const description = value instanceof BslErrorInfo ? value.description : toStringValue(value);
+        throw new BslRuntimeError(description);
+      }
       case 'LabelStatement':
         break; // маркер — no-op
       case 'GotoStatement':
@@ -315,9 +319,12 @@ export class Interpreter {
 
     if (expr.callee.kind === 'Identifier') {
       const lower = key(expr.callee.name);
-      // shortcut: ОписаниеОшибки живёт здесь, т.к. нужен доступ к текущему исключению.
+      // shortcut: ОписаниеОшибки/ИнформацияОбОшибке живут здесь — нужен доступ к текущему исключению.
       if (lower === 'описаниеошибки' || lower === 'errordescription') {
         return ctx.currentError ?? '';
+      }
+      if (lower === 'информацияобошибке' || lower === 'errorinfo') {
+        return new BslErrorInfo(ctx.currentError ?? '');
       }
       const method = ctx.methods.get(lower);
       if (method) return this.callMethod(method, args, ctx);
