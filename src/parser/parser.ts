@@ -17,6 +17,15 @@ const KW_RETURN = new Set(['возврат', 'return']);
 const KW_VAR = new Set(['перем', 'var']);
 const KW_EXPORT = new Set(['экспорт', 'export']);
 const KW_VALUE = new Set(['знач', 'val']);
+const KW_FOR = new Set(['для', 'for']);
+const KW_EACH = new Set(['каждого', 'each']);
+const KW_IN = new Set(['из', 'in']);
+const KW_TO = new Set(['по', 'to']);
+const KW_WHILE = new Set(['пока', 'while']);
+const KW_LOOP = new Set(['цикл', 'do']);
+const KW_ENDLOOP = new Set(['конеццикла', 'enddo']);
+const KW_BREAK = new Set(['прервать', 'break']);
+const KW_CONTINUE = new Set(['продолжить', 'continue']);
 
 const COMPARISON_OPS = new Set(['=', '<>', '<', '>', '<=', '>=']);
 
@@ -47,6 +56,10 @@ class Parser {
     if (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) return this.parseMethod();
     if (this.isKeyword(KW_RETURN)) return this.parseReturn();
     if (this.isKeyword(KW_VAR)) return this.parseVariableDeclaration();
+    if (this.isKeyword(KW_FOR)) return this.parseFor();
+    if (this.isKeyword(KW_WHILE)) return this.parseWhile();
+    if (this.isKeyword(KW_BREAK)) return this.parseBreak();
+    if (this.isKeyword(KW_CONTINUE)) return this.parseContinue();
 
     const next = this.peek(1);
     if (
@@ -132,6 +145,58 @@ class Parser {
     this.matchKeyword(KW_EXPORT);
     this.expectEndOfStatement();
     return { kind: 'VariableDeclaration', pos: this.posOf(start), name };
+  }
+
+  private parseFor(): Statement {
+    const start = this.advance(); // 'для'
+    if (this.matchKeyword(KW_EACH)) {
+      return this.parseForEach(start);
+    }
+    const variable = this.expectIdentifier().lexeme;
+    this.expectOp('=');
+    const from = this.parseExpression();
+    this.expectKeyword(KW_TO);
+    const to = this.parseExpression();
+    this.expectKeyword(KW_LOOP);
+    const body = this.parseLoopBody();
+    return { kind: 'ForLoop', pos: this.posOf(start), variable, from, to, body };
+  }
+
+  private parseForEach(start: Token): Statement {
+    const variable = this.expectIdentifier().lexeme;
+    this.expectKeyword(KW_IN);
+    const collection = this.parseExpression();
+    this.expectKeyword(KW_LOOP);
+    const body = this.parseLoopBody();
+    return { kind: 'ForEachLoop', pos: this.posOf(start), variable, collection, body };
+  }
+
+  private parseWhile(): Statement {
+    const start = this.advance(); // 'пока'
+    const condition = this.parseExpression();
+    this.expectKeyword(KW_LOOP);
+    const body = this.parseLoopBody();
+    return { kind: 'WhileLoop', pos: this.posOf(start), condition, body };
+  }
+
+  private parseBreak(): Statement {
+    const start = this.advance();
+    this.expectEndOfStatement();
+    return { kind: 'BreakStatement', pos: this.posOf(start) };
+  }
+
+  private parseContinue(): Statement {
+    const start = this.advance();
+    this.expectEndOfStatement();
+    return { kind: 'ContinueStatement', pos: this.posOf(start) };
+  }
+
+  private parseLoopBody(): Statement[] {
+    const body: Statement[] = [];
+    while (!this.isEnd() && !this.isKeyword(KW_ENDLOOP)) body.push(this.parseStatement());
+    this.expectKeyword(KW_ENDLOOP);
+    this.matchEndOfStatement();
+    return body;
   }
 
   // --- выражения (по убыванию приоритета) ---

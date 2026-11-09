@@ -2,10 +2,13 @@ import type {
   BinaryExpression,
   CallExpression,
   Expression,
+  ForEachLoop,
+  ForLoop,
   MethodDeclaration,
   Program,
   Statement,
   UnaryExpression,
+  WhileLoop,
 } from '../ast/nodes';
 import { Scope } from './scope';
 import { add, compare, dateFromBsl, equals, toBoolean, toNumber } from './values';
@@ -21,6 +24,8 @@ interface Ctx {
 class ReturnSignal {
   constructor(readonly value: Value) {}
 }
+class BreakSignal {}
+class ContinueSignal {}
 
 const key = (name: string): string => name.toLowerCase();
 
@@ -67,6 +72,64 @@ export class Interpreter {
       case 'MethodDeclaration':
       case 'VariableDeclaration':
         break; // собираются в run()
+      case 'ForLoop':
+        this.execForLoop(stmt, scope, ctx);
+        break;
+      case 'WhileLoop':
+        this.execWhileLoop(stmt, scope, ctx);
+        break;
+      case 'ForEachLoop':
+        this.execForEachLoop(stmt, scope, ctx);
+        break;
+      case 'BreakStatement':
+        throw new BreakSignal();
+      case 'ContinueStatement':
+        throw new ContinueSignal();
+    }
+  }
+
+  private execForLoop(stmt: ForLoop, scope: Scope, ctx: Ctx): void {
+    const from = toNumber(this.eval(stmt.from, scope, ctx));
+    const to = toNumber(this.eval(stmt.to, scope, ctx));
+    for (let i = from; i <= to; i++) {
+      this.setVariable(stmt.variable, i, scope, ctx);
+      try {
+        this.execBlock(stmt.body, scope, ctx);
+      } catch (e) {
+        if (e instanceof BreakSignal) break;
+        if (e instanceof ContinueSignal) continue;
+        throw e;
+      }
+    }
+  }
+
+  private execWhileLoop(stmt: WhileLoop, scope: Scope, ctx: Ctx): void {
+    while (toBoolean(this.eval(stmt.condition, scope, ctx))) {
+      try {
+        this.execBlock(stmt.body, scope, ctx);
+      } catch (e) {
+        if (e instanceof BreakSignal) break;
+        if (e instanceof ContinueSignal) continue;
+        throw e;
+      }
+    }
+  }
+
+  private execForEachLoop(stmt: ForEachLoop, scope: Scope, ctx: Ctx): void {
+    const collection = this.eval(stmt.collection, scope, ctx);
+    // shortcut: коллекции (Массив) появятся в T15; пока итерируем только JS-массивы.
+    if (!Array.isArray(collection)) {
+      throw new Error('Для Каждого: значение не является коллекцией');
+    }
+    for (const item of collection as unknown as Value[]) {
+      this.setVariable(stmt.variable, item, scope, ctx);
+      try {
+        this.execBlock(stmt.body, scope, ctx);
+      } catch (e) {
+        if (e instanceof BreakSignal) break;
+        if (e instanceof ContinueSignal) continue;
+        throw e;
+      }
     }
   }
 

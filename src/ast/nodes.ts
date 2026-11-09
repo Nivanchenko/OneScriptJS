@@ -102,6 +102,30 @@ export interface VariableDeclaration extends Node {
   kind: 'VariableDeclaration';
   name: string;
 }
+export interface ForLoop extends Node {
+  kind: 'ForLoop';
+  variable: string;
+  from: Expression;
+  to: Expression;
+  body: Statement[];
+}
+export interface WhileLoop extends Node {
+  kind: 'WhileLoop';
+  condition: Expression;
+  body: Statement[];
+}
+export interface ForEachLoop extends Node {
+  kind: 'ForEachLoop';
+  variable: string;
+  collection: Expression;
+  body: Statement[];
+}
+export interface BreakStatement extends Node {
+  kind: 'BreakStatement';
+}
+export interface ContinueStatement extends Node {
+  kind: 'ContinueStatement';
+}
 
 export type Statement =
   | Assignment
@@ -109,7 +133,12 @@ export type Statement =
   | ExpressionStatement
   | MethodDeclaration
   | ReturnStatement
-  | VariableDeclaration;
+  | VariableDeclaration
+  | ForLoop
+  | WhileLoop
+  | ForEachLoop
+  | BreakStatement
+  | ContinueStatement;
 
 export interface Program extends Node {
   kind: 'Program';
