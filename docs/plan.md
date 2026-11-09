@@ -79,9 +79,9 @@
 
 ### T6. Браузерный коннектор
 - **Цель**: `<one-script>` берёт код из содержимого и исполняет; вывод `сообщить()`
-  идёт в `console.log` браузера; сборка `dist/osConnector.js` (уже настроена).
+  идёт в `console.log` браузера; сборка `dist/onescript.js` (уже настроена).
 - **Эталон**: `examples/hello.html` (приёмочный сценарий).
-- **Файлы**: `src/browser/osConnector.ts`, `examples/hello.html`.
+- **Файлы**: `src/browser/onescript.ts`, `examples/hello.html`.
 - **Приёмка**: `pnpm build:browser`, открыть `examples/hello.html` — в консоли браузера
   «Привет, ты указал: Никита, Иванченко», «возраст больше 30», «Добро пожаловать…».
 - **Зависит от**: T5.

@@ -10,7 +10,7 @@
 (язык, совместимый с 1С/BSL). Требования из [`task.md`](task.md):
 
 - запускаться на **Node.js** и в **браузере**;
-- подключаться в браузере как `<script src="/osConnector.js"></script>`;
+- подключаться в браузере как `<script src="/onescript.js"></script>`;
 - исполнять код из кастомного элемента `<one-script>`; `Сообщить()` — функция
   стандартной библиотеки, выводит в JavaScript `console.log` (пример —
   [`examples/hello.html`](examples/hello.html)).
@@ -34,7 +34,7 @@
 |---|---|
 | Установить зависимости | `pnpm install` |
 | Проверка типов | `pnpm typecheck` |
-| Собрать браузерный бандл (`dist/osConnector.js`) | `pnpm build:browser` |
+| Собрать браузерный бандл (`dist/onescript.js`) | `pnpm build:browser` |
 | Собрать Node-библиотеку (`dist/node/`) | `pnpm build:node` |
 | Полная сборка (типы + браузер + Node) | `pnpm build` |
 | Запустить тесты | `pnpm test` |
@@ -49,13 +49,13 @@ OneScriptJS/
 ├── task.md                 ← исходное ТЗ
 ├── package.json
 ├── tsconfig.json / tsconfig.build.json
-├── vite.config.ts          ← браузерная сборка (osConnector.js)
+├── vite.config.ts          ← браузерная сборка (onescript.js)
 ├── vite.node.config.ts     ← Node-сборка (ESM + CJS)
 ├── vitest.config.ts
 ├── src/
 │   ├── index.ts            ← точка входа библиотеки (Node / бандлеры)
 │   └── browser/
-│       └── osConnector.ts  ← браузерная точка входа (<one-script>)
+│       └── onescript.ts  ← браузерная точка входа (<one-script>)
 ├── tests/                  ← юнит-тесты Vitest
 ├── examples/               ← HTML-примеры (hello.html — приёмочный сценарий)
 ├── docs/
@@ -74,7 +74,7 @@ OneScriptJS/
 | `ScriptEngine` | стековая ВМ, компилятор, фасад движка | `src/runtime` (ВМ) |
 | `OneScript.StandardLibrary` | стандартная библиотека BSL | `src/stdlib` |
 | `oscript`, `ScriptEngine.HostedScript` | CLI / хостинг | `src/node` (CLI) |
-| веб-обёртки | браузерное исполнение | `src/browser/osConnector.ts` |
+| веб-обёртки | браузерное исполнение | `src/browser/onescript.ts` |
 
 ## 6. Правила и конвенции
 
@@ -101,7 +101,7 @@ OneScriptJS/
 6. **Коммиты** — только по явной просьбе пользователя. Не коммитить
    `reference/`, `node_modules/`, `dist/`, `coverage/`.
 7. **Стиль** — 2 пробела, LF, строгий TypeScript; `.editorconfig` обязателен.
-8. **Файлы в браузер** — `osConnector.ts` использует только браузерные API;
+8. **Файлы в браузер** — `onescript.ts` использует только браузерные API;
    общая логика живёт в `src/`, не в `src/browser/`.
 
 ## 7. Философия разработки: «ленивый сеньор» (Ponytail)
