@@ -61,4 +61,21 @@ export function registerStringFunctions(ctx: GlobalContext): void {
   ctx.registerAlias('Символ', 'Char', (args) => String.fromCharCode(n(args, 0)));
   ctx.registerAlias('КодСимвола', 'CharCode', (args) => s(args, 0).charCodeAt(n(args, 1) - 1));
   ctx.registerAlias('НСтр', 'NStr', (args) => s(args, 0));
+
+  ctx.registerAlias('ТРег', 'Title', (args) => titleCase(s(args, 0)));
+  ctx.registerAlias('СтрЧислоСтрок', 'StrLineCount', (args) => s(args, 0).split('\n').length);
+  ctx.registerAlias('СтрПолучитьСтроку', 'StrGetLine', (args) => s(args, 0).split('\n')[n(args, 1) - 1] ?? '');
+  ctx.registerAlias('СтрНайти', 'StrFind', (args) => s(args, 0).indexOf(s(args, 1)) + 1);
+  ctx.registerAlias('СтрШаблон', 'StrTemplate', (args) => strTemplate(args));
+}
+
+function titleCase(str: string): string {
+  return str.replace(/[а-яёa-z]+/gi, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
+function strTemplate(args: Value[]): string {
+  return s(args, 0).replace(/%(\d+)/g, (_m, num) => {
+    const idx = Number(num);
+    return idx >= 1 && idx < args.length ? toStringValue(args[idx]!) : '';
+  });
 }
