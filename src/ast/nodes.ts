@@ -82,8 +82,34 @@ export interface ExpressionStatement extends Node {
   kind: 'ExpressionStatement';
   expression: Expression;
 }
+export interface MethodParameter {
+  name: string;
+  defaultValue?: Expression;
+}
+export interface MethodDeclaration extends Node {
+  kind: 'MethodDeclaration';
+  name: string;
+  isFunction: boolean;
+  exported: boolean;
+  params: MethodParameter[];
+  body: Statement[];
+}
+export interface ReturnStatement extends Node {
+  kind: 'ReturnStatement';
+  value?: Expression;
+}
+export interface VariableDeclaration extends Node {
+  kind: 'VariableDeclaration';
+  name: string;
+}
 
-export type Statement = Assignment | IfStatement | ExpressionStatement;
+export type Statement =
+  | Assignment
+  | IfStatement
+  | ExpressionStatement
+  | MethodDeclaration
+  | ReturnStatement
+  | VariableDeclaration;
 
 export interface Program extends Node {
   kind: 'Program';

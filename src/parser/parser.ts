@@ -1,6 +1,6 @@
 import { TokenType } from '../lexer/token';
 import type { Token } from '../lexer/token';
-import type { Expression, Pos, Program, Statement } from '../ast/nodes';
+import type { Expression, MethodParameter, Pos, Program, Statement } from '../ast/nodes';
 
 // Ключевые слова распознаются регистронезависимо (RU/EN).
 const KW_IF = new Set(['если', 'if']);
@@ -9,6 +9,14 @@ const KW_ENDIF = new Set(['конецесли', 'endif']);
 const KW_AND = new Set(['и', 'and']);
 const KW_OR = new Set(['или', 'or']);
 const KW_NOT = new Set(['не', 'not']);
+const KW_PROCEDURE = new Set(['процедура', 'procedure']);
+const KW_FUNCTION = new Set(['функция', 'function']);
+const KW_ENDPROCEDURE = new Set(['конецпроцедуры', 'endprocedure']);
+const KW_ENDFUNCTION = new Set(['конецфункции', 'endfunction']);
+const KW_RETURN = new Set(['возврат', 'return']);
+const KW_VAR = new Set(['перем', 'var']);
+const KW_EXPORT = new Set(['экспорт', 'export']);
+const KW_VALUE = new Set(['знач', 'val']);
 
 const COMPARISON_OPS = new Set(['=', '<>', '<', '>', '<=', '>=']);
 
@@ -36,6 +44,9 @@ class Parser {
 
   private parseStatement(): Statement {
     if (this.isKeyword(KW_IF)) return this.parseIf();
+    if (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) return this.parseMethod();
+    if (this.isKeyword(KW_RETURN)) return this.parseReturn();
+    if (this.isKeyword(KW_VAR)) return this.parseVariableDeclaration();
 
     const next = this.peek(1);
     if (
@@ -64,18 +75,63 @@ class Parser {
     const condition = this.parseExpression();
     this.expectKeyword(KW_THEN);
     const thenBranch: Statement[] = [];
-    while (!this.isEnd() && !this.isKeyword(KW_ENDIF)) {
-      thenBranch.push(this.parseStatement());
-    }
+    while (!this.isEnd() && !this.isKeyword(KW_ENDIF)) thenBranch.push(this.parseStatement());
     this.expectKeyword(KW_ENDIF);
-    this.matchEndOfStatement(); // опциональный ;
+    this.matchEndOfStatement();
+    return { kind: 'IfStatement', pos: this.posOf(start), condition, thenBranch, elseBranch: null };
+  }
+
+  private parseMethod(): Statement {
+    const start = this.advance(); // 'процедура' | 'функция'
+    const isFunction = KW_FUNCTION.has(start.lexeme.toLowerCase());
+    const name = this.expectIdentifier();
+    this.expectOp('(');
+    const params: MethodParameter[] = [];
+    if (!this.checkOp(')')) {
+      do {
+        params.push(this.parseParameter());
+      } while (this.matchOp(','));
+    }
+    this.expectOp(')');
+    const exported = this.matchKeyword(KW_EXPORT);
+    const endKw = isFunction ? KW_ENDFUNCTION : KW_ENDPROCEDURE;
+    const body: Statement[] = [];
+    while (!this.isEnd() && !this.isKeyword(endKw)) body.push(this.parseStatement());
+    this.expectKeyword(endKw);
+    this.matchEndOfStatement();
     return {
-      kind: 'IfStatement',
+      kind: 'MethodDeclaration',
       pos: this.posOf(start),
-      condition,
-      thenBranch,
-      elseBranch: null,
+      name: name.lexeme,
+      isFunction,
+      exported,
+      params,
+      body,
     };
+  }
+
+  private parseParameter(): MethodParameter {
+    this.matchKeyword(KW_VALUE); // модификатор 'Знач' — пока игнорируется (все параметры по значению)
+    const name = this.expectIdentifier().lexeme;
+    let defaultValue: Expression | undefined;
+    if (this.matchOp('=')) defaultValue = this.parseExpression();
+    return { name, defaultValue };
+  }
+
+  private parseReturn(): Statement {
+    const start = this.advance(); // 'возврат'
+    let value: Expression | undefined;
+    if (this.peek().type !== TokenType.EndOfStatement) value = this.parseExpression();
+    this.expectEndOfStatement();
+    return { kind: 'ReturnStatement', pos: this.posOf(start), value };
+  }
+
+  private parseVariableDeclaration(): Statement {
+    const start = this.advance(); // 'перем'
+    const name = this.expectIdentifier().lexeme;
+    this.matchKeyword(KW_EXPORT);
+    this.expectEndOfStatement();
+    return { kind: 'VariableDeclaration', pos: this.posOf(start), name };
   }
 
   // --- выражения (по убыванию приоритета) ---
@@ -221,6 +277,19 @@ class Parser {
 
   private expectKeyword(set: Set<string>): Token {
     if (!this.isKeyword(set)) this.error(`ожидается ключевое слово`);
+    return this.advance();
+  }
+
+  private matchKeyword(set: Set<string>): boolean {
+    if (this.isKeyword(set)) {
+      this.advance();
+      return true;
+    }
+    return false;
+  }
+
+  private expectIdentifier(): Token {
+    if (this.peek().type !== TokenType.Identifier) this.error('ожидается идентификатор');
     return this.advance();
   }
 

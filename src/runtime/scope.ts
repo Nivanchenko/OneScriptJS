@@ -4,8 +4,12 @@ import type { Value } from './values';
 export class Scope {
   private readonly vars = new Map<string, Value>();
 
+  constructor(private readonly parent?: Scope) {}
+
   get(name: string): Value {
-    return this.vars.get(name.toLowerCase());
+    const key = name.toLowerCase();
+    if (this.vars.has(key)) return this.vars.get(key);
+    return this.parent?.get(name);
   }
 
   set(name: string, value: Value): void {
