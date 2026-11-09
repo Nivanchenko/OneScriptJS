@@ -8,6 +8,7 @@ import { registerStringFunctions } from './strings';
 import { registerMathFunctions } from './math';
 import { registerJsonFunctions } from './json';
 import { registerTypeFunctions } from './types';
+import { registerBitFunctions } from './bitwise';
 
 /** Создаёт стандартный глобальный контекст (`Сообщить`, типы и пр.). */
 export function createGlobalContext(): GlobalContext {
@@ -31,6 +32,7 @@ export function createGlobalContext(): GlobalContext {
   registerMathFunctions(ctx);
   registerJsonFunctions(ctx);
   registerTypeFunctions(ctx);
+  registerBitFunctions(ctx);
   return ctx;
 }
 
