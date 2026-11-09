@@ -8,11 +8,7 @@ import type {
 import { Scope } from './scope';
 import { add, compare, dateFromBsl, equals, toBoolean, toNumber } from './values';
 import type { Value } from './values';
-
-/** Реестр глобальных функций (`Сообщить` и пр. подключаются в T5). */
-export interface RuntimeEnvironment {
-  call(name: string, args: Value[]): Value;
-}
+import type { RuntimeEnvironment } from './context';
 
 /** Tree-walking интерпретатор BSL. */
 export class Interpreter {

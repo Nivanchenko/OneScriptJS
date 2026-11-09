@@ -4,19 +4,17 @@
  *
  * Вывод `Сообщить()` идёт через стандартную библиотеку в `console.log`.
  * Подключается как <script src="/osConnector.js"></script>.
- * Полноценный запуск движка появится в задачах разработки.
  */
-import { version } from '../index';
+import { run } from '../runtime/runner';
+import { createGlobalContext } from '../stdlib/global-context';
 
 const ONE_SCRIPT_TAG = 'one-script';
 
 class OneScriptElement extends HTMLElement {
   connectedCallback(): void {
-    const code = this.textContent ?? '';
-    // Плейсхолдер: реальный запуск движка появится в задачах разработки.
-    console.log(
-      `OneScriptJS v${version()}: движок ещё не реализован (код: ${code.length} симв.)`,
-    );
+    // Отложить до конца разбора: на момент connectedCallback содержимое элемента
+    // может быть ещё не распарсено (элемент подключается до своих дочерних узлов).
+    queueMicrotask(() => run(this.textContent ?? '', createGlobalContext()));
   }
 }
 

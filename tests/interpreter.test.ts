@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { tokenize } from '../src/lexer/lexer';
 import { parse } from '../src/parser/parser';
 import { Interpreter } from '../src/runtime/interpreter';
-import type { RuntimeEnvironment } from '../src/runtime/interpreter';
+import type { RuntimeEnvironment } from '../src/runtime/context';
 import { toStringValue } from '../src/runtime/values';
 
 /** Выполняет исходник и собирает вывод фиктивного Сообщить. */
