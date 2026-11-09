@@ -4,6 +4,7 @@ import type { Value } from '../runtime/values';
 import { BslArray } from './collections/array';
 import { registerStringFunctions } from './strings';
 import { registerMathFunctions } from './math';
+import { registerJsonFunctions } from './json';
 
 /** Создаёт стандартный глобальный контекст (`Сообщить`, типы и пр.). */
 export function createGlobalContext(): GlobalContext {
@@ -13,6 +14,7 @@ export function createGlobalContext(): GlobalContext {
   ctx.registerType('Array', (args) => new BslArray(args));
   registerStringFunctions(ctx);
   registerMathFunctions(ctx);
+  registerJsonFunctions(ctx);
   return ctx;
 }
 
