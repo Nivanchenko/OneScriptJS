@@ -2,11 +2,19 @@ import type { GlobalContext } from '../runtime/context';
 import { isBslObject } from '../runtime/object';
 import type { Value } from '../runtime/values';
 import { BslArray } from './collections/array';
+import { BslStructure } from './collections/structure';
 
 function toJson(value: Value): unknown {
   if (value === null || value === undefined) return null;
   if (value instanceof Date) return value.toISOString();
   if (isBslObject(value)) {
+    if (value.typeName === 'Структура' || value.typeName === 'ФиксированнаяСтруктура') {
+      const obj: Record<string, unknown> = {};
+      for (const key of value.iterate?.() ?? []) {
+        obj[String(key)] = toJson(value.getProp(String(key)));
+      }
+      return obj;
+    }
     if (value.iterate) return value.iterate().map(toJson);
     throw new Error(`ЗаписатьJSON: тип '${value.typeName}' не сериализуется`);
   }
@@ -21,7 +29,11 @@ function fromJson(value: unknown): Value {
     return arr;
   }
   if (typeof value === 'object') {
-    throw new Error('ПрочитатьJSON: объекты JSON пока не поддерживаются (нужна Структура)');
+    const struct = new BslStructure([]);
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      struct.callMethod('Вставить', [k, fromJson(v)]);
+    }
+    return struct;
   }
   return value as Value;
 }

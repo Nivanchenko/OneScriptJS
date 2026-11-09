@@ -1,18 +1,26 @@
 import type { BslObject } from '../../runtime/object';
+import { isBslObject } from '../../runtime/object';
 import type { Value } from '../../runtime/values';
 import { equals, toNumber } from '../../runtime/values';
 
-/** Массив BSL — обёртка над JS-массивом (поддерживает многомерность). */
+/** Массив BSL — обёртка над JS-массивом (поддерживает многомерность и фиксированность). */
 export class BslArray implements BslObject {
-  readonly typeName = 'Массив';
+  readonly typeName: string;
   private readonly items: Value[];
+  private readonly readOnly: boolean;
 
-  constructor(args: Value[]) {
-    const dims = args.map((a) => {
-      if (typeof a !== 'number') throw new Error('Размерности массива должны быть числами');
-      return a;
-    });
-    this.items = BslArray.build(dims);
+  constructor(args: Value[], readOnly = false, typeName = 'Массив') {
+    this.readOnly = readOnly;
+    this.typeName = typeName;
+    if (args.length === 1 && isBslObject(args[0]) && args[0] instanceof BslArray) {
+      this.items = [...args[0].items];
+    } else {
+      const dims = args.map((a) => {
+        if (typeof a !== 'number') throw new Error('Размерности массива должны быть числами');
+        return a;
+      });
+      this.items = BslArray.build(dims);
+    }
   }
 
   private static build(dims: number[]): Value[] {
@@ -26,14 +34,20 @@ export class BslArray implements BslObject {
     return result;
   }
 
+  private ensureWritable(): void {
+    if (this.readOnly) throw new Error(`Коллекция '${this.typeName}' только для чтения`);
+  }
+
   callMethod(name: string, args: Value[]): Value {
     switch (name.toLowerCase()) {
       case 'добавить':
       case 'add':
+        this.ensureWritable();
         this.items.push(args[0]);
         return undefined;
       case 'удалить':
       case 'delete':
+        this.ensureWritable();
         this.items.splice(toNumber(args[0]!), 1);
         return undefined;
       case 'найти':
@@ -48,7 +62,7 @@ export class BslArray implements BslObject {
       case 'ubound':
         return this.items.length - 1;
       default:
-        throw new Error(`Метод '${name}' не найден у типа Массив`);
+        throw new Error(`Метод '${name}' не найден у типа ${this.typeName}`);
     }
   }
 
@@ -57,15 +71,16 @@ export class BslArray implements BslObject {
   }
 
   setIndex(index: Value, value: Value): void {
+    this.ensureWritable();
     this.items[toNumber(index)] = value;
   }
 
   getProp(name: string): Value {
-    throw new Error(`Свойство '${name}' не найдено у типа Массив`);
+    throw new Error(`Свойство '${name}' не найдено у типа ${this.typeName}`);
   }
 
   setProp(name: string, value: Value): void {
-    throw new Error(`Свойство '${name}' не найдено у типа Массив`);
+    throw new Error(`Свойство '${name}' не найдено у типа ${this.typeName}`);
   }
 
   iterate(): Value[] {
