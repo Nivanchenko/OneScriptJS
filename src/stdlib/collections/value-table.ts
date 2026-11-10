@@ -259,7 +259,7 @@ export class BslValueTableColumnCollection implements BslObject {
   readonly typeName = 'КоллекцияКолонокТаблицыЗначений';
   private readonly items: BslValueTableColumn[] = [];
 
-  constructor(private readonly owner: BslValueTable) {}
+  constructor(private readonly onRemoveColumn?: (col: BslValueTableColumn) => void) {}
 
   all(): BslValueTableColumn[] {
     return this.items;
@@ -309,7 +309,7 @@ export class BslValueTableColumnCollection implements BslObject {
       case 'delete': {
         const col = this.resolveColumn(args[0]!);
         this.items.splice(this.items.indexOf(col), 1);
-        this.owner.indexes.removeColumn(col);
+        this.onRemoveColumn?.(col);
         return undefined;
       }
       case 'индекс':
@@ -322,14 +322,32 @@ export class BslValueTableColumnCollection implements BslObject {
       case 'найти':
       case 'find':
         return this.findByName(String(args[0])) ?? undefined;
+      case 'получить':
+      case 'get':
+        return this.items[this.checkColumnIndex(toNumber(args[0]))]!;
+      case 'сдвинуть':
+      case 'move': {
+        const col = this.resolveColumn(args[0]!);
+        const source = this.items.indexOf(col);
+        let dest = (source + toNumber(args[1])) % this.items.length;
+        while (dest < 0) dest += this.items.length;
+        const [c] = this.items.splice(source, 1);
+        this.items.splice(dest, 0, c!);
+        return undefined;
+      }
       case 'очистить':
       case 'clear':
-        for (const col of [...this.items]) this.owner.indexes.removeColumn(col);
+        for (const col of [...this.items]) this.onRemoveColumn?.(col);
         this.items.length = 0;
         return undefined;
       default:
         throw new Error(`Метод '${name}' не найден у типа КоллекцияКолонокТаблицыЗначений`);
     }
+  }
+
+  private checkColumnIndex(index: number): number {
+    if (index < 0 || index >= this.items.length) throw new Error('Значение индекса выходит за пределы диапазона');
+    return index;
   }
 
   private checkColumnName(name: string): void {
@@ -368,8 +386,8 @@ export class BslValueTable implements BslObject {
   private readonly rows: BslValueTableRow[] = [];
 
   constructor() {
-    this.columns = new BslValueTableColumnCollection(this);
     this.indexes = new BslCollectionIndexes(this);
+    this.columns = new BslValueTableColumnCollection((col) => this.indexes.removeColumn(col));
   }
 
   resolveColumn(index: Value): BslValueTableColumn {

@@ -8,6 +8,7 @@ import { BslMap } from './collections/map';
 import { BslStructure } from './collections/structure';
 import { BslValueList } from './collections/value-list';
 import { BslValueTable } from './collections/value-table';
+import { BslValueTree } from './collections/value-tree';
 import { registerStringFunctions } from './strings';
 import { registerMathFunctions } from './math';
 import { registerJsonFunctions } from './json';
@@ -44,6 +45,8 @@ export function createGlobalContext(): GlobalContext {
   ctx.registerType('ValueList', () => new BslValueList());
   ctx.registerType('ТаблицаЗначений', () => new BslValueTable());
   ctx.registerType('ValueTable', () => new BslValueTable());
+  ctx.registerType('ДеревоЗначений', () => new BslValueTree());
+  ctx.registerType('ValueTree', () => new BslValueTree());
 
   registerStringFunctions(ctx);
   registerMathFunctions(ctx);
