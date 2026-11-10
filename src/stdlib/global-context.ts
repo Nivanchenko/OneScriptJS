@@ -20,6 +20,7 @@ import { registerFormatFunction } from './format';
 import { BslExpect } from './asserts';
 import { registerBinaryFunctions } from './binary';
 import { BslUniqueIdentifier } from './uuid';
+import { registerSystemFunctions } from './system';
 
 /** Создаёт стандартный глобальный контекст (`Сообщить`, типы и пр.). */
 export function createGlobalContext(): GlobalContext {
@@ -69,6 +70,7 @@ export function createGlobalContext(): GlobalContext {
   registerEnums(ctx);
   registerFormatFunction(ctx);
   registerBinaryFunctions(ctx);
+  registerSystemFunctions(ctx);
 
   // Библиотека asserts (`#Использовать asserts`): Ожидаем.Что(факт).Равно(…).
   ctx.registerGlobal('Ожидаем', new BslExpect());

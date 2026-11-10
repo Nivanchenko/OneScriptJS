@@ -117,6 +117,22 @@ export function registerEnums(ctx: GlobalContext): void {
     'BigEndian': 'BigEndian',
   });
 
+  registerEnum(ctx, 'ТипПлатформы', 'ТипПлатформы', 'PlatformType', {
+    'Linux_x86': 'Linux_x86',
+    'Linux_x86_64': 'Linux_x86_64',
+    'MacOS_x86': 'MacOS_x86',
+    'MacOS_x86_64': 'MacOS_x86_64',
+    'Windows_x86': 'Windows_x86',
+    'Windows_x86_64': 'Windows_x86_64',
+    'Unknown': 'Unknown',
+  });
+
+  registerEnum(ctx, 'РасположениеПеременнойСреды', 'РасположениеПеременнойСреды', 'EnvironmentVariableTarget', {
+    'Процесс': 'Процесс', 'Process': 'Процесс',
+    'Пользователь': 'Пользователь', 'User': 'Пользователь',
+    'Машина': 'Машина', 'Machine': 'Машина',
+  });
+
   const symbols = new BslConstants('Символы', {
     'ПС': '\n', 'LF': '\n',
     'ВК': '\r', 'CR': '\r',

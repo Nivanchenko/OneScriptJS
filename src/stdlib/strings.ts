@@ -23,6 +23,7 @@ export function registerStringFunctions(ctx: GlobalContext): void {
   ctx.registerAlias('СокрЛП', 'TrimAll', (args) => s(args, 0).trim());
   ctx.registerAlias('СокрЛ', 'TrimL', (args) => s(args, 0).replace(/^\s+/, ''));
   ctx.registerAlias('СокрП', 'TrimR', (args) => s(args, 0).replace(/\s+$/, ''));
+  ctx.registerAlias('ПустаяСтрока', 'IsBlankString', (args) => s(args, 0).trim() === '');
 
   ctx.registerAlias('Лев', 'Left', (args) => s(args, 0).slice(0, n(args, 1)));
   ctx.registerAlias('Прав', 'Right', (args) => {
