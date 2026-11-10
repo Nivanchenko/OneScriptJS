@@ -63,3 +63,33 @@ export class BslEnumNamespace implements BslObject {
     throw new Error(`Свойство '${name}' недоступно для записи`);
   }
 }
+
+/** Глобальный объект с константными значениями (`Символы.ПС` и т.п.). */
+export class BslConstants implements BslObject {
+  readonly typeName: string;
+  private readonly values: Map<string, Value>;
+
+  constructor(typeName: string, values: Record<string, Value>) {
+    this.typeName = typeName;
+    this.values = new Map(Object.entries(values).map(([k, v]) => [k.toLowerCase(), v]));
+  }
+
+  getProp(name: string): Value {
+    const key = name.toLowerCase();
+    if (!this.values.has(key)) throw new Error(`Свойство '${name}' не найдено у ${this.typeName}`);
+    return this.values.get(key);
+  }
+
+  callMethod(name: string): Value {
+    throw new Error(`Метод '${name}' не найден у ${this.typeName}`);
+  }
+  getIndex(): Value {
+    throw new Error(`Индексация недоступна для ${this.typeName}`);
+  }
+  setIndex(): void {
+    throw new Error(`Индексация недоступна для ${this.typeName}`);
+  }
+  setProp(name: string): void {
+    throw new Error(`Свойство '${name}' недоступно для записи`);
+  }
+}
