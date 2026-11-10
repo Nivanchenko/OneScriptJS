@@ -39,7 +39,8 @@
 | Полная сборка (типы + браузер + Node) | `pnpm build` |
 | Запустить тесты | `pnpm test` |
 | Тесты в watch-режиме | `pnpm test:watch` |
-| Dev-сервер (для `examples/`) | `pnpm dev` |
+| Dev-сервер (для `examples/`) | `pnpm build:browser && pnpm dev` |
+| Статическая сборка + preview | `pnpm demo` |
 
 ## 4. Структура каталогов
 

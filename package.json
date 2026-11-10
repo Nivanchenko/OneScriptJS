@@ -32,7 +32,8 @@
     "build": "tsc --noEmit && vite build && vite build --config vite.node.config.ts && vite build --config vite.cli.config.ts && tsc -p tsconfig.build.json",
     "oscript": "node dist/cli.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "demo": "vite build && node scripts/copy-examples.mjs && vite preview --port 4173 --open /counter.html"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

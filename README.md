@@ -93,6 +93,41 @@ pnpm oscript script.os
 echo 'сообщить("hi");' | pnpm oscript
 ```
 
+## Как проверить в браузере
+
+Есть два способа — оба требуют предварительной сборки бандла.
+
+### 1. Dev-сервер (удобно для правки примеров)
+
+```bash
+pnpm build:browser   # собрать dist/onescript.js
+pnpm dev             # http://localhost:5173
+```
+
+Открыть:
+
+- http://localhost:5173/examples/counter.html — счётчик на кнопке
+- http://localhost:5173/examples/input.html — зеркалирование ввода
+- http://localhost:5173/examples/hover.html — наведение/уход
+- http://localhost:5173/examples/dom.html — создание DOM из BSL
+- http://localhost:5173/examples/hello.html — приёмочный пример из `task.md`
+
+Dev-сервер отдаёт собранный `dist/onescript.js` по пути `/onescript.js`
+(см. плагин `serveBuiltBundle` в `vite.config.ts`).
+
+> Если меняли **движок** (`src/`) — повторите `pnpm build:browser` и обновите
+> страницу. Если правили **HTML-примеры** — достаточно обновить страницу.
+> Консоль браузера: там же вывод `Сообщить()`.
+
+### 2. Статическая сборка (`preview`)
+
+```bash
+pnpm demo   # сборка + копирование примеров в dist/ + http://localhost:4173
+```
+
+Открывается `/counter.html`; остальные страницы — по тем же именам:
+`/input.html`, `/hover.html`, `/dom.html`, `/hello.html`.
+
 ## Разработка
 
 ```bash
