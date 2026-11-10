@@ -1,4 +1,15 @@
+# dependencies
 node_modules/
-public/
-build/
-package-lock.json
+.pnpm-store/
+
+# build output
+dist/
+coverage/
+
+# reference (исходник на C#, не часть этого репозитория)
+reference
+
+# логи и служебное
+*.log
+.DS_Store
+.vite/

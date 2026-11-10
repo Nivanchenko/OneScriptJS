@@ -1,19 +1,45 @@
 {
+  "name": "onescriptjs",
+  "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "scripts": {
-    "debug": "tsx debug.ts",
-    "test": "vitest",
-    "test:run": "vitest run"
+  "description": "OneScript — движок языка 1С/BSL, переписанный на TypeScript. Работает в Node.js и в браузере.",
+  "license": "MIT",
+  "author": "Nikita Ivanchenko",
+  "packageManager": "pnpm@11.28.5",
+  "engines": {
+    "node": ">=20"
   },
-  "dependencies": {
-    "web-tree-sitter": "^0.25.10"
+  "main": "./dist/node/index.cjs",
+  "module": "./dist/node/index.js",
+  "types": "./dist/node/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/node/index.d.ts",
+      "import": "./dist/node/index.js",
+      "require": "./dist/node/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build:browser": "vite build",
+    "build:node": "vite build --config vite.node.config.ts && tsc -p tsconfig.build.json",
+    "build:cli": "vite build --config vite.cli.config.ts",
+    "build": "tsc --noEmit && vite build && vite build --config vite.node.config.ts && vite build --config vite.cli.config.ts && tsc -p tsconfig.build.json",
+    "oscript": "node dist/cli.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "demo": "vite build && node scripts/copy-examples.mjs && vite preview --port 4173 --open /counter.html"
   },
   "devDependencies": {
-    "browserify": "^17.0.1",
-    "express": "^5.1.0",
-    "@types/jest": "^30.0.0",
+    "@types/node": "^24.19.2",
+    "happy-dom": "^21.0.4",
     "typescript": "^5.9.3",
-    "vite": "^7.2.2",
-    "vitest": "^4.0.8"
+    "vite": "^6.4.5",
+    "vitest": "^3.2.7"
   }
 }

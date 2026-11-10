@@ -1,24 +1,172 @@
-# OneScript.JS Development Guide
+# AGENTS.md — OneScriptJS
 
-## Core Architecture
-- Implementation of OneScript engine in JavaScript/TypeScript
-- Uses tree-sitter grammar compiled to WASM for parsing
-- Three main components: Parser (OneScriptParser.ts), Compiler (OneScriptCompiler.ts), Virtual Machine (OneScriptVirtualMachine.ts)
-- Entry point: OneScript.ts combines all components
+Точка входа для AI-агентов и автоматизации (DSH-режим). Здесь: цель проекта,
+инструменты, команды, структура каталогов, карта «C# → TypeScript» и правила,
+которых обязан придерживаться каждый агент.
 
-## Key Directories and Files
-- `src/` - Main source code directory
-- `tests/` - Test suite using Vitest
-- `grammar.js` - Tree-sitter grammar definition
-- `src/OneScriptCompiler.ts` - Compiler for VM
-- `src/OneScriptParser.ts` - Parser
-- `src/OneScriptVirtualMachine.ts` - VM implementation
-- `src/OneScriptOperations.ts` - List of VM operations
+## 1. Что это за проект
 
-## Development Commands
-- `npm test` or `npm run test:run` - Run all tests
-- `npm run debug` - Run debug script (debug.ts)
-- `bash ./run_test.sh` - Run tests via shell script
+**OneScriptJS** — переписанный на TypeScript движок [OneScript](https://oscript.io)
+(язык, совместимый с 1С/BSL). Требования из [`task.md`](task.md):
 
-## Testing
-- Tests located in `tests/all.test.ts`
+- запускаться на **Node.js** и в **браузере**;
+- подключаться в браузере как `<script src="/onescript.js"></script>`;
+- исполнять код из кастомного элемента `<one-script>`; `Сообщить()` — функция
+  стандартной библиотеки, выводит в JavaScript `console.log` (пример —
+  [`examples/hello.html`](examples/hello.html)).
+
+Оригинал на C# лежит в **`reference/OneScript/`** (игнорируется git-ом, см.
+`.gitignore`). Это справочный исходник, а не код нашего репозитория — его **не
+менять**.
+
+## 2. Стек и инструменты
+
+- **pnpm** — менеджер пакетов. Как запускать в DSH-окружении — см. §6.
+- **Node.js** >= 20. В DSH-окружении использовать системный node из nvm, а не
+  встроенный DSH-node (см. §6).
+- **TypeScript** — strict-режим (`tsconfig.json`).
+- **Vite** — сборка браузерного бандла и Node-библиотеки.
+- **Vitest** — юнит-тесты.
+
+## 3. Команды
+
+| Действие | Команда |
+|---|---|
+| Установить зависимости | `pnpm install` |
+| Проверка типов | `pnpm typecheck` |
+| Собрать браузерный бандл (`dist/onescript.js`) | `pnpm build:browser` |
+| Собрать Node-библиотеку (`dist/node/`) | `pnpm build:node` |
+| Полная сборка (типы + браузер + Node) | `pnpm build` |
+| Запустить тесты | `pnpm test` |
+| Тесты в watch-режиме | `pnpm test:watch` |
+| Dev-сервер (для `examples/`) | `pnpm build:browser && pnpm dev` |
+| Статическая сборка + preview | `pnpm demo` |
+
+## 4. Структура каталогов
+
+```
+OneScriptJS/
+├── AGENTS.md               ← этот файл
+├── task.md                 ← исходное ТЗ
+├── package.json
+├── tsconfig.json / tsconfig.build.json
+├── vite.config.ts          ← браузерная сборка (onescript.js)
+├── vite.node.config.ts     ← Node-сборка (ESM + CJS)
+├── vitest.config.ts
+├── src/
+│   ├── index.ts            ← точка входа библиотеки (Node / бандлеры)
+│   └── browser/
+│       └── onescript.ts  ← браузерная точка входа (<one-script>)
+├── tests/                  ← юнит-тесты Vitest
+├── examples/               ← HTML-примеры (hello.html — приёмочный сценарий)
+├── docs/
+│   └── architecture.md     ← карта «C# → TypeScript» и план слоёв
+└── reference/              ← исходник OneScript на C# (не коммитится)
+```
+
+## 5. Карта «C# → TypeScript» (кратко)
+
+Подробнее — [`docs/architecture.md`](docs/architecture.md). Ключевые соответствия:
+
+| Слой (C#, `reference/OneScript/src/`) | Назначение | Куда в TypeScript |
+|---|---|---|
+| `OneScript.Language` | лексер / препроцессор / парсер / AST | `src/lexer`, `src/parser`, `src/ast` |
+| `OneScript.Core` | система типов, значения, контексты | `src/runtime` (типы/значения) |
+| `ScriptEngine` | стековая ВМ, компилятор, фасад движка | `src/runtime` (ВМ) |
+| `OneScript.StandardLibrary` | стандартная библиотека BSL | `src/stdlib` |
+| `oscript`, `ScriptEngine.HostedScript` | CLI / хостинг | `src/node` (CLI) |
+| веб-обёртки | браузерное исполнение | `src/browser/onescript.ts` |
+
+## 6. Правила и конвенции
+
+1. **Менеджер пакетов** — только `pnpm`. В DSH-окружении встроенный DSH-node
+   **не может** загружать нативные аддоны (macOS: «different Team IDs» у
+   `.node`-библиотек rollup/esbuild), поэтому запускать pnpm нужно **системным
+   node из nvm**:
+
+   ```bash
+   export PATH="$HOME/.nvm/versions/node/v24.22.0/bin:$PATH"
+   node "$DSH_PNPM" install   # $DSH_PNPM = путь к pnpm.mjs из load_workspace_dependencies
+   node "$DSH_PNPM" test
+   ```
+
+   На обычной машине (без DSH) достаточно `pnpm install` / `pnpm test` с node >= 20.
+2. **TDD** — сначала падающий тест (Vitest), потом минимальная реализация.
+   Доступен скилл `generic-superpowers-test-driven-development`.
+3. **Проверка перед «готово»** — прогнать `pnpm typecheck && pnpm test` (и при
+   необходимости `pnpm build`), показать вывод как доказательство
+   (`generic-superpowers-verification-before-completion`).
+4. **BSL-имена двуязычные** — как в оригинале, поддерживать русские и английские
+   алиасы идентификаторов (`Сообщить`/`Message`, `Если`/`If` и т.п.).
+5. **Не трогать `reference/`** — только читать. Это эталон для сверки поведения.
+6. **Коммиты** — только по явной просьбе пользователя. Не коммитить
+   `reference/`, `node_modules/`, `dist/`, `coverage/`.
+7. **Стиль** — 2 пробела, LF, строгий TypeScript; `.editorconfig` обязателен.
+8. **Файлы в браузер** — `onescript.ts` использует только браузерные API;
+   общая логика живёт в `src/`, не в `src/browser/`.
+
+## 7. Философия разработки: «ленивый сеньор» (Ponytail)
+
+Базовый принцип: **лучший код — тот, который ты не написал**. Решай всю задачу
+минимальным количеством нового кода. Это не про «меньше токенов»: код остаётся
+маленьким, потому что он необходим, а не потому что его «ужали». По мотивам
+скила [`DietrichGebert/ponytail`](https://github.com/DietrichGebert/ponytail).
+
+### 7.1. Прежде чем писать код
+
+- Прочитай задачу и код, который она меняет. Перечисли все места, куда должно
+  дотянуться изменение: вызывающие, тесты, фикстуры, конфиг, экспорты.
+- Проверь, что изменение может сломать у пользователей: данные, которые оно
+  уничтожит или раскроет, вызывающих, которые перестанут работать.
+- Это и есть scope. Дополнительные фичи — не scope.
+
+### 7.2. Лестница решений — остановись на первой ступени, которая выдерживает
+
+1. Это вообще нужно? Пропусти фичи, опции и гибкость, которые никто не просил,
+   и назови их одной строкой. Расплывчатый запрос получает минимальную версию.
+2. Уже есть в кодовой базе (хелпер, компонент, сервис, паттерн)? Используй так,
+   как это делает окружающий код.
+3. Стандартная библиотека или нативная возможность платформы/браузера? Используй
+   её, если в проекте нет своей.
+4. Уже установленная зависимость? Используй её. Не добавляй зависимость ради
+   пары строк.
+5. Можно одной строкой, понятной с первого взгляда? Одной строкой.
+6. Иначе — минимальный код, который работает.
+
+### 7.3. Лениться в решении, но не в самом изменении
+
+- Доводи до конца каждую часть задачи: вызывающих, тесты и фикстуры, которые
+  ломает твоё изменение.
+- Никаких абстракций, обёрток, конвертаций типов, опций, конфигов, бойлерплейта
+  и кода «на потом», который никто не просил. Удаление лучше добавления.
+- Сохраняй структуру кодовой базы: её слои, интерфейсы и конвенции.
+- Комментарий — только «почему», которое код не показывает, одной строкой.
+- Багфикс: прежде чем править, пройдись по всем вызывающим изменяемой функции и
+  почини корневую причину один раз в общем коде.
+- Переносимый/объединяемый код сохраняет свои обработку ошибок и валидацию.
+- Новая нетривиальная логика (ветвление, цикл, парсер, деньги/безопасность,
+  целый новый скрипт) оставляет один маленький тест — пишется по TDD из §6.2.
+  Тривиальным изменениям тест не нужен.
+- Осознанное сокращение с известным лимитом помечай комментарием:
+  `shortcut: <лимит>, <когда апгрейдить>`.
+
+### 7.4. Никогда не вырезай
+
+Валидацию на границах доверия, обработку ошибок, предотвращающую потерю данных,
+безопасность, доступность (a11y) и всё, что явно просил пользователь. Ленивый —
+не значит халатный.
+
+### 7.5. Завершай ответ раскрытием
+
+В конце каждого ответа одной-двумя строками укажи: что ты пропустил или не
+проверил, и какой риск пользователь должен знать.
+
+## 8. Связанные документы
+
+- [`task.md`](task.md) — исходное ТЗ и приёмочный HTML-пример.
+- [`docs/architecture.md`](docs/architecture.md) — карта слоёв и статус переноса.
+- [`docs/plan.md`](docs/plan.md) — план задач (фазы T1–T20, порядок и приёмка).
+- [`docs/bsl-surface.md`](docs/bsl-surface.md) — синтаксис и stdlib BSL (по `reference/tests`).
+- `reference/OneScript/AGENTS.md` — инструкции к оригиналу (для справки).
+- `reference/OneScript/docs/developer_docs.md` — архитектура C#-движка.
+- `reference/OneScript/docs/contexts.md` — как устроены контексты/методы BSL.
