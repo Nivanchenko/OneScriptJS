@@ -1,4 +1,4 @@
-# OneScriptJS
+# OneScriptJS 
 
 Движок [OneScript](https://oscript.io) (язык, совместимый с 1С/BSL), переписанный на
 TypeScript. Работает в **Node.js** и в **браузере**. Оригинал на C# — в
