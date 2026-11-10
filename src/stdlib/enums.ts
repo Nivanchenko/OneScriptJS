@@ -112,6 +112,11 @@ export function registerEnums(ctx: GlobalContext): void {
     'URLВКодировкеURL': 'URLВКодировкеURL', 'URLInURLEncoding': 'URLВКодировкеURL',
   });
 
+  registerEnum(ctx, 'ПорядокБайтов', 'ПорядокБайтов', 'ByteOrder', {
+    'LittleEndian': 'LittleEndian',
+    'BigEndian': 'BigEndian',
+  });
+
   const symbols = new BslConstants('Символы', {
     'ПС': '\n', 'LF': '\n',
     'ВК': '\r', 'CR': '\r',
