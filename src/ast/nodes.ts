@@ -128,7 +128,7 @@ export interface ReturnStatement extends Node {
 }
 export interface VariableDeclaration extends Node {
   kind: 'VariableDeclaration';
-  name: string;
+  names: string[];
 }
 export interface ForLoop extends Node {
   kind: 'ForLoop';
@@ -161,7 +161,7 @@ export interface TryExceptStatement extends Node {
 }
 export interface RaiseStatement extends Node {
   kind: 'RaiseStatement';
-  value: Expression;
+  value?: Expression;
 }
 export interface LabelStatement extends Node {
   kind: 'LabelStatement';

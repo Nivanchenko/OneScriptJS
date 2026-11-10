@@ -78,8 +78,10 @@ export class Interpreter {
     for (const stmt of program.body) {
       if (stmt.kind === 'MethodDeclaration') ctx.methods.set(key(stmt.name), stmt);
       else if (stmt.kind === 'VariableDeclaration') {
-        ctx.moduleVars.add(key(stmt.name));
-        ctx.moduleScope.set(stmt.name, undefined);
+        for (const name of stmt.names) {
+          ctx.moduleVars.add(key(name));
+          ctx.moduleScope.set(name, undefined);
+        }
       }
     }
     const executable = program.body.filter(
@@ -179,8 +181,14 @@ export class Interpreter {
         this.execTryExcept(stmt, scope, ctx);
         break;
       case 'RaiseStatement': {
-        const value = this.eval(stmt.value, scope, ctx);
-        const description = value instanceof BslErrorInfo ? value.description : toStringValue(value);
+        const value = stmt.value === undefined ? undefined : this.eval(stmt.value, scope, ctx);
+        // Без аргумента `ВызватьИсключение;` перевыбрасывает текущее исключение.
+        const description =
+          value === undefined
+            ? (ctx.currentError ?? '')
+            : value instanceof BslErrorInfo
+              ? value.description
+              : toStringValue(value);
         throw new BslRuntimeError(description);
       }
       case 'LabelStatement':

@@ -144,8 +144,95 @@ describe('парсер', () => {
     expect(stmt.body[1]).toMatchObject({ pos: { line: 2, column: 3 } });
   });
 
+  it('парсит множественное объявление Перем a, b, c;', () => {
+    const program = parse(tokenize('Перем а, б, в;'));
+    expect(program.body[0]).toMatchObject({
+      kind: 'VariableDeclaration',
+      names: ['а', 'б', 'в'],
+    });
+  });
+
+  it('парсит Перем с Экспорт у каждого имени', () => {
+    const program = parse(tokenize('Перем Поле1 Экспорт, Поле2;'));
+    expect(program.body[0]).toMatchObject({
+      kind: 'VariableDeclaration',
+      names: ['Поле1', 'Поле2'],
+    });
+  });
+
+  it('парсит пропущенные аргументы вызова f(,23) и f(a,,c)', () => {
+    const a = parseExpr('ф(, 23)') as { kind: string; expression: { args: unknown[] } };
+    expect(a.expression.args).toMatchObject([
+      { kind: 'UndefinedLiteral' },
+      { kind: 'NumberLiteral', value: 23 },
+    ]);
+
+    const b = parseExpr('ф("x",, "z")') as { kind: string; expression: { args: unknown[] } };
+    expect(b.expression.args).toMatchObject([
+      { kind: 'StringLiteral', value: 'x' },
+      { kind: 'UndefinedLiteral' },
+      { kind: 'StringLiteral', value: 'z' },
+    ]);
+  });
+
+  it('парсит конкатенацию смежных строковых литералов', () => {
+    const stmt = parseExpr('x = "a" "b"');
+    expect(stmt).toMatchObject({
+      kind: 'Assignment',
+      value: { kind: 'StringLiteral', value: 'ab' },
+    });
+  });
+
+  it('парсит ВызватьИсключение без аргумента (перевыброс)', () => {
+    const program = parse(tokenize('ВызватьИсключение;'));
+    expect(program.body[0]).toMatchObject({ kind: 'RaiseStatement', value: undefined });
+  });
+
+  it('парсит Новый("Массив") как вызов глобальной функции', () => {
+    const stmt = parseExpr('Новый("Массив")');
+    expect(stmt).toMatchObject({
+      kind: 'ExpressionStatement',
+      expression: {
+        kind: 'CallExpression',
+        callee: { kind: 'Identifier', name: 'Новый' },
+        args: [{ kind: 'StringLiteral', value: 'Массив' }],
+      },
+    });
+  });
+
+  it('пропускает пустые операторы ;;', () => {
+    const program = parse(tokenize('a = 1;;\nb = 2;'));
+    expect(program.body).toHaveLength(2);
+    expect(program.body[0]).toMatchObject({ kind: 'Assignment', target: { name: 'a' } });
+    expect(program.body[1]).toMatchObject({ kind: 'Assignment', target: { name: 'b' } });
+  });
+
+  it('допускает конец блока как терминатор оператора без ;', () => {
+    const program = parse(tokenize('если Истина тогда\n  ВызватьИсключение "ошибка"\nКонецЕсли;'));
+    expect(program.body[0]).toMatchObject({
+      kind: 'IfStatement',
+      thenBranch: [{ kind: 'RaiseStatement', value: { kind: 'StringLiteral', value: 'ошибка' } }],
+    });
+  });
+
+  it('парсит ключевые литералы как имена свойств', () => {
+    const stmt = parseExpr('Структура.Истина');
+    expect(stmt).toMatchObject({
+      kind: 'ExpressionStatement',
+      expression: { kind: 'MemberExpression', property: 'Истина' },
+    });
+    expect(parseExpr('Структура.Неопределено')).toMatchObject({
+      kind: 'ExpressionStatement',
+      expression: { kind: 'MemberExpression', property: 'Неопределено' },
+    });
+    expect(parseExpr('Структура.Null')).toMatchObject({
+      kind: 'ExpressionStatement',
+      expression: { kind: 'MemberExpression', property: 'Null' },
+    });
+  });
+
   it('бросает ошибку при отсутствии ;', () => {
-    expect(() => parse(tokenize('имя = "x"'))).toThrow(/ожидается ';'/);
+    expect(() => parse(tokenize('имя = "x"\nвозраст = 2'))).toThrow(/ожидается ';'/);
   });
 
   it('бросает ошибку при отсутствии конецесли', () => {

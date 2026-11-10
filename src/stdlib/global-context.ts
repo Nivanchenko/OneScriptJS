@@ -1,5 +1,6 @@
 import { GlobalContext } from '../runtime/context';
 import { BslEnumValue } from '../runtime/enum';
+import { BslType } from '../runtime/type';
 import { toStringValue } from '../runtime/values';
 import type { Value } from '../runtime/values';
 import { BslArray } from './collections/array';
@@ -12,11 +13,18 @@ import { registerTypeFunctions } from './types';
 import { registerBitFunctions } from './bitwise';
 import { registerEnums } from './enums';
 import { registerFormatFunction } from './format';
+import { BslExpect } from './asserts';
 
 /** Создаёт стандартный глобальный контекст (`Сообщить`, типы и пр.). */
 export function createGlobalContext(): GlobalContext {
   const ctx = new GlobalContext();
   ctx.registerAlias('Сообщить', 'Message', message);
+  // Динамический конструктор: `Новый("Массив", …)` / `Новый(ИмяТипа, …)`.
+  ctx.registerAlias('Новый', 'New', (args) => {
+    const typeArg = args[0];
+    const name = typeArg instanceof BslType ? typeArg.name : toStringValue(typeArg);
+    return ctx.construct(name, args.slice(1));
+  });
 
   ctx.registerType('Массив', (args) => new BslArray(args));
   ctx.registerType('Array', (args) => new BslArray(args));
@@ -38,6 +46,10 @@ export function createGlobalContext(): GlobalContext {
   registerBitFunctions(ctx);
   registerEnums(ctx);
   registerFormatFunction(ctx);
+
+  // Библиотека asserts (`#Использовать asserts`): Ожидаем.Что(факт).Равно(…).
+  ctx.registerGlobal('Ожидаем', new BslExpect());
+  ctx.registerGlobal('Expect', new BslExpect());
   return ctx;
 }
 

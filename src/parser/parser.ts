@@ -35,6 +35,18 @@ const KW_RAISE = new Set(['вызватьисключение', 'raise']);
 const KW_NEW = new Set(['новый', 'new']);
 const KW_GOTO = new Set(['перейти', 'goto']);
 
+// Ключевые слова конца блока: завершают оператор без ';'.
+const END_OF_BLOCK = new Set([
+  'конецесли', 'endif',
+  'конецпроцедуры', 'endprocedure',
+  'конецфункции', 'endfunction',
+  'иначе', 'else',
+  'иначеесли', 'elsif',
+  'конеццикла', 'enddo',
+  'конецпопытки', 'endtry',
+  'исключение', 'except',
+]);
+
 const COMPARISON_OPS = new Set(['=', '<>', '<', '>', '<=', '>=']);
 
 /** Строит AST из потока токенов лексера. */
@@ -65,6 +77,7 @@ class Parser {
 
   private parseStatement(): Statement {
     while (this.checkOp('&')) this.skipAnnotation();
+    while (this.matchEndOfStatement()) { /* пустой оператор `;;` */ }
 
     if (this.isKeyword(KW_IF)) return this.parseIf();
     if (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) return this.parseMethod();
@@ -174,10 +187,13 @@ class Parser {
 
   private parseVariableDeclaration(): Statement {
     const start = this.advance(); // 'перем'
-    const name = this.expectIdentifier().lexeme;
-    this.matchKeyword(KW_EXPORT);
+    const names: string[] = [];
+    do {
+      names.push(this.expectIdentifier().lexeme);
+      this.matchKeyword(KW_EXPORT);
+    } while (this.matchOp(','));
     this.expectEndOfStatement();
-    return { kind: 'VariableDeclaration', pos: this.posOf(start), name };
+    return { kind: 'VariableDeclaration', pos: this.posOf(start), names };
   }
 
   private parseFor(): Statement {
@@ -236,7 +252,8 @@ class Parser {
 
   private parseRaise(): Statement {
     const start = this.advance(); // 'вызватьисключение'
-    const value = this.parseExpression();
+    let value: Expression | undefined;
+    if (this.peek().type !== TokenType.EndOfStatement) value = this.parseExpression();
     this.expectEndOfStatement();
     return { kind: 'RaiseStatement', pos: this.posOf(start), value };
   }
@@ -357,7 +374,15 @@ class Parser {
         return { kind: 'NumberLiteral', pos: this.posOf(token), value: token.value as number };
       case TokenType.String:
         this.advance();
-        return { kind: 'StringLiteral', pos: this.posOf(token), value: token.value as string };
+        {
+          // Конкатенация смежных строковых литералов (`"a" "b"` → `"ab"`).
+          let value = token.value as string;
+          while (this.peek().type === TokenType.String) {
+            value += this.peek().value as string;
+            this.advance();
+          }
+          return { kind: 'StringLiteral', pos: this.posOf(token), value };
+        }
       case TokenType.Boolean:
         this.advance();
         return { kind: 'BooleanLiteral', pos: this.posOf(token), value: token.value as boolean };
@@ -371,7 +396,8 @@ class Parser {
         this.advance();
         return { kind: 'UndefinedLiteral', pos: this.posOf(token) };
       case TokenType.Identifier:
-        if (this.isKeyword(KW_NEW)) return this.parseNew();
+        // `Новый(Тип, …)` — вызов глобальной функции; `Новый Тип` — оператор.
+        if (this.isKeyword(KW_NEW) && !this.checkNextOp('(')) return this.parseNew();
         this.advance();
         return { kind: 'Identifier', pos: this.posOf(token), name: token.lexeme };
       case TokenType.Operator:
@@ -403,7 +429,7 @@ class Parser {
         expr = { kind: 'IndexExpression', pos: expr.pos, object: expr, index };
       } else if (this.checkOp('.')) {
         this.advance();
-        const property = this.expectIdentifier().lexeme;
+        const property = this.expectPropertyName();
         expr = { kind: 'MemberExpression', pos: expr.pos, object: expr, property };
       } else {
         break;
@@ -417,11 +443,19 @@ class Parser {
     const args: Expression[] = [];
     if (!this.checkOp(')')) {
       do {
-        args.push(this.parseExpression());
+        args.push(this.parseArgument());
       } while (this.matchOp(','));
     }
     this.expectOp(')');
     return { kind: 'CallExpression', pos: callee.pos, callee, args };
+  }
+
+  /** Аргумент вызова: пропущенный параметр (`f(,23)`) даёт Неопределено. */
+  private parseArgument(): Expression {
+    if (this.checkOp(',') || this.checkOp(')')) {
+      return { kind: 'UndefinedLiteral', pos: this.posOf(this.peek()) };
+    }
+    return this.parseExpression();
   }
 
   private parseTernary(): Expression {
@@ -443,7 +477,7 @@ class Parser {
     if (this.matchOp('(')) {
       if (!this.checkOp(')')) {
         do {
-          args.push(this.parseExpression());
+          args.push(this.parseArgument());
         } while (this.matchOp(','));
       }
       this.expectOp(')');
@@ -488,8 +522,27 @@ class Parser {
     return this.advance();
   }
 
+  /** Имя свойства допускает ключевые литералы (`Структура.Истина`, `.Null`). */
+  private expectPropertyName(): string {
+    const t = this.peek();
+    if (
+      t.type === TokenType.Identifier ||
+      t.type === TokenType.Boolean ||
+      t.type === TokenType.Null ||
+      t.type === TokenType.Undefined
+    ) {
+      this.advance();
+      return t.lexeme;
+    }
+    this.error('ожидается имя свойства');
+  }
+
   private checkOp(op: string): boolean {
     return this.peek().type === TokenType.Operator && this.peek().lexeme === op;
+  }
+
+  private checkNextOp(op: string): boolean {
+    return this.peek(1).type === TokenType.Operator && this.peek(1).lexeme === op;
   }
 
   private matchOp(op: string): boolean {
@@ -513,7 +566,16 @@ class Parser {
   }
 
   private expectEndOfStatement(): void {
-    if (!this.matchEndOfStatement()) this.error("ожидается ';'");
+    if (!this.isEndOfStatement()) this.error("ожидается ';'");
+    this.matchEndOfStatement();
+  }
+
+  /** Оператор завершается `;`, концом блока (КонецЕсли и т.п.) или концом файла. */
+  private isEndOfStatement(): boolean {
+    if (this.peek().type === TokenType.EndOfStatement) return true;
+    if (this.isEnd()) return true;
+    const t = this.peek();
+    return t.type === TokenType.Identifier && END_OF_BLOCK.has(t.lexeme.toLowerCase());
   }
 
   private advance(): Token {
