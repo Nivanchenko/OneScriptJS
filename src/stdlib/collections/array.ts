@@ -50,6 +50,11 @@ export class BslArray implements BslObject {
         this.ensureWritable();
         this.items.splice(toNumber(args[0]!), 1);
         return undefined;
+      case 'очистить':
+      case 'clear':
+        this.ensureWritable();
+        this.items.length = 0;
+        return undefined;
       case 'найти':
       case 'find': {
         const idx = this.items.findIndex((x) => equals(x, args[0]!));
@@ -71,7 +76,8 @@ export class BslArray implements BslObject {
   }
 
   setIndex(index: Value, value: Value): void {
-    this.ensureWritable();
+    // В 1С запись по индексу фиксированного массива даёт именно это сообщение.
+    if (this.readOnly) throw new Error('Индексированное значение доступно только для чтения');
     this.items[toNumber(index)] = value;
   }
 

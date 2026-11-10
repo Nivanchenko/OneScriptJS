@@ -6,9 +6,26 @@ import { BslType } from '../runtime/type';
 /** Контекст `ЮнитТестирование` (xUnitFor1C): методы-утверждения. */
 export class BslTestContext implements BslObject {
   readonly typeName = 'ЮнитТестирование';
+  private readonly tempFiles: string[] = [];
+  private detailedErrors = false;
 
   callMethod(name: string, args: Value[]): Value {
     switch (name.toLowerCase()) {
+      case 'подробныеописанияошибок':
+      case 'showdetailederrors':
+        // Влияет только на формат вывода раннера; для нас — запоминаем флаг.
+        this.detailedErrors = toBoolean(args[0]!);
+        return undefined;
+      case 'тестпровален':
+      case 'fail':
+        throw new Error(`Тест провален.${args[0] !== undefined && args[0] !== '' ? ` ${toStringValue(args[0])}` : ''}`);
+      case 'имявременногофайла':
+      case 'tempfilename': {
+        const ext = args[0] === undefined ? 'tmp' : toStringValue(args[0]);
+        const file = `${tempDir()}/oscript_${randomSuffix()}${ext ? `.${ext}` : ''}`;
+        this.tempFiles.push(file);
+        return file;
+      }
       case 'проверитьравенство':
       case 'assertequals':
         if (!equals(args[0], args[1])) {
@@ -79,4 +96,13 @@ export class BslTestContext implements BslObject {
 
 function fmt(value: Value): string {
   return toStringValue(value ?? '');
+}
+
+function tempDir(): string {
+  const proc = (globalThis as { process?: { env: Record<string, string | undefined> } }).process;
+  return proc?.env['TMPDIR'] ?? proc?.env['TEMP'] ?? proc?.env['TMP'] ?? '/tmp';
+}
+
+function randomSuffix(): string {
+  return Math.random().toString(36).slice(2, 10);
 }

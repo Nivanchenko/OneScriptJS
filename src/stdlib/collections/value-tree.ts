@@ -56,6 +56,11 @@ export class BslValueTreeRow implements BslObject {
   }
 
   setProp(name: string, value: Value): void {
+    const lower = name.toLowerCase();
+    // Предопределённые свойства строки дерева — только для чтения.
+    if (lower === 'родитель' || lower === 'parent' || lower === 'строки' || lower === 'rows') {
+      throw new Error(`Свойство '${name}' доступно только для чтения`);
+    }
     this.data.set(this.owner.resolveColumn(name), value);
   }
 
