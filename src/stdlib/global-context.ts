@@ -22,6 +22,7 @@ import { registerBinaryFunctions } from './binary';
 import { BslUniqueIdentifier } from './uuid';
 import { registerSystemFunctions } from './system';
 import { registerRegexFunctions } from './regex';
+import { registerRandomFunctions } from './random';
 
 /** Создаёт стандартный глобальный контекст (`Сообщить`, типы и пр.). */
 export function createGlobalContext(): GlobalContext {
@@ -73,6 +74,7 @@ export function createGlobalContext(): GlobalContext {
   registerBinaryFunctions(ctx);
   registerSystemFunctions(ctx);
   registerRegexFunctions(ctx);
+  registerRandomFunctions(ctx);
 
   // Библиотека asserts (`#Использовать asserts`): Ожидаем.Что(факт).Равно(…).
   ctx.registerGlobal('Ожидаем', new BslExpect());
