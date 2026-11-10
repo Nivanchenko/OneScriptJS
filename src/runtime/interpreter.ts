@@ -2,6 +2,7 @@ import type {
   BinaryExpression,
   CallExpression,
   Expression,
+  ExpressionStatement,
   ForEachLoop,
   ForLoop,
   IndexExpression,
@@ -14,6 +15,9 @@ import type {
   UnaryExpression,
   WhileLoop,
 } from '../ast/nodes';
+import { tokenize } from '../lexer/lexer';
+import { parse } from '../parser/parser';
+import { preprocess } from '../parser/preprocessor';
 import { Ref, Scope } from './scope';
 import { add, compare, dateFromBsl, equals, toBoolean, toNumber, toStringValue, typeName } from './values';
 import type { Value } from './values';
@@ -221,6 +225,9 @@ export class Interpreter {
               : toStringValue(value);
         throw new BslRuntimeError(description);
       }
+      case 'ExecuteStatement':
+        this.execDynamic(toStringValue(this.eval(stmt.value, scope, ctx)), scope, ctx);
+        break;
       case 'LabelStatement':
         break; // маркер — no-op
       case 'GotoStatement':
@@ -231,16 +238,22 @@ export class Interpreter {
   private execForLoop(stmt: ForLoop, scope: Scope, ctx: Ctx): void {
     const from = toNumber(this.eval(stmt.from, scope, ctx));
     const to = toNumber(this.eval(stmt.to, scope, ctx));
+    let completed = true;
     for (let i = from; i <= to; i++) {
       this.setVariable(stmt.variable, i, scope, ctx);
       try {
         this.execBlock(stmt.body, scope, ctx);
       } catch (e) {
-        if (e instanceof BreakSignal) break;
+        if (e instanceof BreakSignal) {
+          completed = false;
+          break;
+        }
         if (e instanceof ContinueSignal) continue;
         throw e;
       }
     }
+    // Как в 1С: после нормального завершения переменная цикла равна «по + 1».
+    if (completed) this.setVariable(stmt.variable, to + 1, scope, ctx);
   }
 
   private execWhileLoop(stmt: WhileLoop, scope: Scope, ctx: Ctx): void {
@@ -347,8 +360,11 @@ export class Interpreter {
         return toNumber(left) - toNumber(right);
       case '*':
         return toNumber(left) * toNumber(right);
-      case '/':
-        return toNumber(left) / toNumber(right);
+      case '/': {
+        const divisor = toNumber(right);
+        if (divisor === 0) throw new BslRuntimeError('Деление на ноль');
+        return toNumber(left) / divisor;
+      }
       case '%':
         return toNumber(left) % toNumber(right);
       case '=':
@@ -385,6 +401,11 @@ export class Interpreter {
   private evalCall(expr: CallExpression, scope: Scope, ctx: Ctx): Value {
     if (expr.callee.kind === 'Identifier') {
       const lower = key(expr.callee.name);
+      // shortcut: Вычислить живёт здесь — нужен доступ к текущей области видимости.
+      if (lower === 'вычислить' || lower === 'eval') {
+        const code = toStringValue(this.eval(expr.args[0]!, scope, ctx));
+        return this.evalDynamicExpression(code, scope, ctx);
+      }
       // shortcut: ОписаниеОшибки/ИнформацияОбОшибке живут здесь — нужен доступ к текущему исключению.
       if (lower === 'описаниеошибки' || lower === 'errordescription') {
         return ctx.currentError ?? '';
@@ -484,6 +505,47 @@ export class Interpreter {
         temp = v;
       },
     );
+  }
+
+  // --- динамическое исполнение (`Выполнить` / `Вычислить`) ---
+
+  // shortcut: динамический код не проходит препроцессор (директивы `#` в нём не
+  // поддерживаются) — чтобы не тянуть цикл interpreter → preprocessor → interpreter.
+  private static compileDynamic(source: string): Program {
+    return parse(tokenize(source));
+  }
+
+  /** `Вычислить(строка)` — вычисляет выражение в текущей области видимости. */
+  private evalDynamicExpression(code: string, scope: Scope, ctx: Ctx): Value {
+    // оборачиваем в вызов, чтобы разобрать именно выражение (как препроцессор)
+    const program = Interpreter.compileDynamic(`сообщить(${code});`);
+    const stmt = program.body[0] as ExpressionStatement;
+    const call = stmt.expression as CallExpression;
+    return this.eval(call.args[0]!, scope, ctx);
+  }
+
+  /** `Выполнить строка` — исполняет операторы в текущей области видимости. */
+  private execDynamic(source: string, scope: Scope, ctx: Ctx): void {
+    let program: Program;
+    try {
+      program = Interpreter.compileDynamic(source);
+    } catch (e) {
+      throw new BslRuntimeError(e instanceof Error ? e.message : String(e));
+    }
+    // объявленные в динамическом коде методы попадают в модуль
+    const executable: Statement[] = [];
+    for (const stmt of program.body) {
+      if (stmt.kind === 'MethodDeclaration') ctx.methods.set(key(stmt.name), stmt);
+      else executable.push(stmt);
+    }
+    try {
+      this.execGotoBlock(executable, scope, ctx);
+    } catch (e) {
+      if (e instanceof ReturnSignal) {
+        throw new BslRuntimeError('Оператор "Возврат" может использоваться только внутри метода');
+      }
+      throw e;
+    }
   }
 
   private setVariable(name: string, value: Value, scope: Scope, ctx: Ctx): void {

@@ -163,6 +163,10 @@ export interface RaiseStatement extends Node {
   kind: 'RaiseStatement';
   value?: Expression;
 }
+export interface ExecuteStatement extends Node {
+  kind: 'ExecuteStatement';
+  value: Expression;
+}
 export interface LabelStatement extends Node {
   kind: 'LabelStatement';
   name: string;
@@ -186,6 +190,7 @@ export type Statement =
   | ContinueStatement
   | TryExceptStatement
   | RaiseStatement
+  | ExecuteStatement
   | LabelStatement
   | GotoStatement;
 

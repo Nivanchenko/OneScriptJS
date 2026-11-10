@@ -65,13 +65,23 @@ export function registerStringFunctions(ctx: GlobalContext): void {
 
   ctx.registerAlias('Символ', 'Char', (args) => String.fromCharCode(n(args, 0)));
   ctx.registerAlias('КодСимвола', 'CharCode', (args) => s(args, 0).charCodeAt((args[1] === undefined ? 1 : n(args, 1)) - 1));
-  ctx.registerAlias('НСтр', 'NStr', (args) => s(args, 0));
+  ctx.registerAlias('НСтр', 'NStr', (args) => nstr(s(args, 0)));
 
   ctx.registerAlias('ТРег', 'Title', (args) => titleCase(s(args, 0)));
   ctx.registerAlias('СтрЧислоСтрок', 'StrLineCount', (args) => s(args, 0).split('\n').length);
   ctx.registerAlias('СтрПолучитьСтроку', 'StrGetLine', (args) => s(args, 0).split('\n')[n(args, 1) - 1] ?? '');
   ctx.registerAlias('СтрНайти', 'StrFind', (args) => strFind(args));
   ctx.registerAlias('СтрШаблон', 'StrTemplate', (args) => strTemplate(args));
+}
+
+/**
+ * `НСтр("ru='...';en='...'")` → строка для текущего языка (у нас — `ru`).
+ * Если формат не распознан, возвращаем исходную строку.
+ */
+function nstr(source: string): string {
+  const match = /(?:^|;)\s*ru\s*=\s*'((?:[^']|'')*)'/i.exec(source);
+  if (!match) return source;
+  return match[1]!.replace(/''/g, "'");
 }
 
 function titleCase(str: string): string {

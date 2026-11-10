@@ -34,6 +34,7 @@ const KW_ENDTRY = new Set(['конецпопытки', 'endtry']);
 const KW_RAISE = new Set(['вызватьисключение', 'raise']);
 const KW_NEW = new Set(['новый', 'new']);
 const KW_GOTO = new Set(['перейти', 'goto']);
+const KW_EXECUTE = new Set(['выполнить', 'execute']);
 
 // Ключевые слова конца блока: завершают оператор без ';'.
 const END_OF_BLOCK = new Set([
@@ -90,6 +91,7 @@ class Parser {
     if (this.isKeyword(KW_TRY)) return this.parseTry();
     if (this.isKeyword(KW_RAISE)) return this.parseRaise();
     if (this.isKeyword(KW_GOTO)) return this.parseGoto();
+    if (this.isKeyword(KW_EXECUTE)) return this.parseExecute();
     if (this.checkOp('~')) return this.parseLabel();
 
     const save = this.current;
@@ -256,6 +258,13 @@ class Parser {
     if (this.peek().type !== TokenType.EndOfStatement) value = this.parseExpression();
     this.expectEndOfStatement();
     return { kind: 'RaiseStatement', pos: this.posOf(start), value };
+  }
+
+  private parseExecute(): Statement {
+    const start = this.advance(); // 'выполнить'
+    const value = this.parseExpression();
+    this.expectEndOfStatement();
+    return { kind: 'ExecuteStatement', pos: this.posOf(start), value };
   }
 
   private parseLoopBody(): Statement[] {
