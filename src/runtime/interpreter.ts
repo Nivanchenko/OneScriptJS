@@ -246,9 +246,12 @@ export class Interpreter {
     try {
       this.execBlock(stmt.tryBody, scope, ctx);
     } catch (e) {
-      if (e instanceof BslRuntimeError) {
+      // BSL: Попытка/Исключение ловит любые ошибки рантайма, в т.ч. ошибки stdlib
+      // (обычный Error), а не только ВызватьИсключение. Сигналы управления
+      // (Return/Break/Continue/Goto) — не Error, пропускаются.
+      if (e instanceof Error) {
         const prev = ctx.currentError;
-        ctx.currentError = e.description;
+        ctx.currentError = e instanceof BslRuntimeError ? e.description : e.message;
         try {
           this.execBlock(stmt.exceptBody, scope, ctx);
         } finally {
