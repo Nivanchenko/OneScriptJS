@@ -116,6 +116,18 @@ export class Interpreter {
     return undefined;
   }
 
+  /**
+   * Исполняет код в области видимости модуля (обработчики событий, REPL и т.п.).
+   * Дополнительные переменные (`vars`) видны коду и не меняют модуль.
+   */
+  executeInModule(source: string, vars?: Record<string, Value>): void {
+    const ctx = this.moduleCtx;
+    if (!ctx) throw new Error('Модуль ещё не выполнен');
+    const scope = new Scope(ctx.moduleScope);
+    if (vars) for (const [name, value] of Object.entries(vars)) scope.set(name, value);
+    this.execDynamic(source, scope, ctx);
+  }
+
   /** Есть ли у модуля метод с таким именем. */
   hasMethod(name: string): boolean {
     return this.moduleCtx?.methods.has(key(name)) ?? false;

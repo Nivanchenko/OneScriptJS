@@ -1,5 +1,6 @@
 import type { BslObject } from '../runtime/object';
 import type { GlobalContext } from '../runtime/context';
+import type { Interpreter } from '../runtime/interpreter';
 import type { Value } from '../runtime/values';
 import { toNumber, toStringValue } from '../runtime/values';
 import { BslArray } from '../stdlib/collections/array';
@@ -19,6 +20,85 @@ function getDocument(): Document {
 function getElement(value: Value): Element {
   if (!(value instanceof BslDomElement)) throw new Error('Неверный тип аргумента: ожидался элемент DOM');
   return value.element;
+}
+
+/** Слушатели событий живут на самом DOM-элементе: любая обёртка над ним может снять обработчик. */
+const LISTENERS = new WeakMap<Element, Map<string, EventListener>>();
+
+/** Псевдонимы имён событий: русское/английское имя → DOM-событие. */
+const EVENT_ALIASES = new Map<string, string>();
+
+function alias(domEvent: string, ...names: string[]): void {
+  for (const name of names) EVENT_ALIASES.set(name.toLowerCase(), domEvent);
+}
+
+alias('click', 'Нажатие', 'Click');
+alias('dblclick', 'ДвойноеНажатие', 'DoubleClick');
+alias('input', 'Ввод', 'Input');
+alias('change', 'Изменение', 'Change');
+alias('mouseenter', 'Наведение', 'MouseEnter');
+alias('mouseleave', 'Уход', 'MouseLeave');
+alias('keydown', 'НажатиеКлавиши', 'KeyDown');
+alias('submit', 'Отправка', 'Submit');
+
+/** Имя события из BSL → тип DOM-события (неизвестные имена передаются как есть). */
+function domEventType(name: string): string {
+  return EVENT_ALIASES.get(name.toLowerCase()) ?? name;
+}
+
+/** `Событие` DOM, доступное обработчику BSL. */
+export class BslDomEvent implements BslObject {
+  readonly typeName = 'СобытиеDOM';
+
+  constructor(
+    private readonly event: Event,
+    private readonly ctx: GlobalContext,
+  ) {}
+
+  callMethod(name: string): Value {
+    switch (name.toLowerCase()) {
+      case 'отменить':
+      case 'preventdefault':
+        this.event.preventDefault();
+        return undefined;
+      case 'остановитьраспространение':
+      case 'stopPropagation':
+        this.event.stopPropagation();
+        return undefined;
+      default:
+        throw new Error(`Метод '${name}' не найден у типа СобытиеDOM`);
+    }
+  }
+
+  getProp(name: string): Value {
+    switch (name.toLowerCase()) {
+      case 'тип':
+      case 'type':
+        return this.event.type;
+      case 'цель':
+      case 'target': {
+        const target = this.event.target as Element | null;
+        return target ? new BslDomElement(target, this.ctx) : undefined;
+      }
+      case 'отменено':
+      case 'defaultprevented':
+        return this.event.defaultPrevented;
+      default:
+        throw new Error(`Свойство '${name}' не найдено у типа СобытиеDOM`);
+    }
+  }
+
+  setProp(name: string): void {
+    throw new Error(`Свойство '${name}' недоступно для записи`);
+  }
+
+  getIndex(): Value {
+    throw new Error('Индексация недоступна для типа СобытиеDOM');
+  }
+
+  setIndex(): void {
+    throw new Error('Индексация недоступна для типа СобытиеDOM');
+  }
 }
 
 /** `Стиль` элемента — доступ к `element.style`. */
@@ -66,7 +146,10 @@ export class BslDomStyle implements BslObject {
 export class BslDomElement implements BslObject {
   readonly typeName = 'ЭлементDOM';
 
-  constructor(readonly element: Element) {}
+  constructor(
+    readonly element: Element,
+    private readonly ctx: GlobalContext,
+  ) {}
 
   callMethod(name: string, args: Value[]): Value {
     const el = this.element;
@@ -107,14 +190,60 @@ export class BslDomElement implements BslObject {
       case 'естькласс':
       case 'hasclass':
         return el.classList.contains(toStringValue(args[0] ?? ''));
+      case 'насобытие':
+      case 'onevent': {
+        const domType = domEventType(toStringValue(args[0] ?? ''));
+        const code = toStringValue(args[1] ?? '');
+        this.onEvent(domType, code);
+        return undefined;
+      }
+      case 'снятьсобытие':
+      case 'offevent': {
+        this.offEvent(domEventType(toStringValue(args[0] ?? '')));
+        return undefined;
+      }
       case 'запросить':
       case 'queryselector': {
         const found = el.querySelector(toStringValue(args[0] ?? ''));
-        return found ? new BslDomElement(found) : undefined;
+        return found ? new BslDomElement(found, this.ctx) : undefined;
       }
       default:
         throw new Error(`Метод '${name}' не найден у типа ЭлементDOM`);
     }
+  }
+
+  /** Подписка на DOM-событие: код исполняется в области видимости скрипта-подписчика. */
+  private onEvent(domType: string, code: string): void {
+    this.offEvent(domType);
+    const listener: EventListener = (event) => {
+      try {
+        this.interpreter().executeInModule(code, { 'Событие': new BslDomEvent(event, this.ctx) });
+      } catch (e) {
+        // Ошибка в обработчике не должна ломать страницу.
+        console.error(`Ошибка в обработчике события '${domType}':`, e instanceof Error ? e.message : e);
+      }
+    };
+    let map = LISTENERS.get(this.element);
+    if (!map) {
+      map = new Map<string, EventListener>();
+      LISTENERS.set(this.element, map);
+    }
+    map.set(domType, listener);
+    this.element.addEventListener(domType, listener);
+  }
+
+  private offEvent(domType: string): void {
+    const map = LISTENERS.get(this.element);
+    const listener = map?.get(domType);
+    if (!map || !listener) return;
+    this.element.removeEventListener(domType, listener);
+    map.delete(domType);
+  }
+
+  private interpreter(): Interpreter {
+    const interpreter = this.ctx.currentInterpreter;
+    if (!interpreter) throw new Error('Нет исполняемого скрипта для обработчика события');
+    return interpreter;
   }
 
   getProp(name: string): Value {
@@ -144,12 +273,12 @@ export class BslDomElement implements BslObject {
       case 'родитель':
       case 'parent': {
         const parent = el.parentElement;
-        return parent ? new BslDomElement(parent) : undefined;
+        return parent ? new BslDomElement(parent, this.ctx) : undefined;
       }
       case 'дети':
       case 'children': {
         const arr = new BslArray([]);
-        for (const child of Array.from(el.children)) arr.callMethod('Добавить', [new BslDomElement(child)]);
+        for (const child of Array.from(el.children)) arr.callMethod('Добавить', [new BslDomElement(child, this.ctx)]);
         return arr;
       }
       default:
@@ -188,7 +317,7 @@ export class BslDomElement implements BslObject {
   getIndex(index: Value): Value {
     const children = Array.from(this.element.children);
     const child = children[toNumber(index)];
-    return child ? new BslDomElement(child) : undefined;
+    return child ? new BslDomElement(child, this.ctx) : undefined;
   }
 
   setIndex(): void {
@@ -200,27 +329,29 @@ export class BslDomElement implements BslObject {
 export class BslDomDocument implements BslObject {
   readonly typeName = 'ДокументDOM';
 
+  constructor(private readonly ctx: GlobalContext) {}
+
   callMethod(name: string, args: Value[]): Value {
     const doc = getDocument();
     switch (name.toLowerCase()) {
       case 'получитьэлемент':
       case 'getelementbyid': {
         const found = doc.getElementById(toStringValue(args[0] ?? ''));
-        return found ? new BslDomElement(found) : undefined;
+        return found ? new BslDomElement(found, this.ctx) : undefined;
       }
       case 'создатьэлемент':
       case 'createelement':
-        return new BslDomElement(doc.createElement(toStringValue(args[0] ?? 'div')));
+        return new BslDomElement(doc.createElement(toStringValue(args[0] ?? 'div')), this.ctx);
       case 'запросить':
       case 'queryselector': {
         const found = doc.querySelector(toStringValue(args[0] ?? ''));
-        return found ? new BslDomElement(found) : undefined;
+        return found ? new BslDomElement(found, this.ctx) : undefined;
       }
       case 'запроситьвсе':
       case 'queryselectorall': {
         const arr = new BslArray([]);
         for (const el of Array.from(doc.querySelectorAll(toStringValue(args[0] ?? '')))) {
-          arr.callMethod('Добавить', [new BslDomElement(el)]);
+          arr.callMethod('Добавить', [new BslDomElement(el, this.ctx)]);
         }
         return arr;
       }
@@ -235,7 +366,7 @@ export class BslDomDocument implements BslObject {
       case 'телокорпуса':
       case 'body': {
         const body = doc.body;
-        return body ? new BslDomElement(body) : undefined;
+        return body ? new BslDomElement(body, this.ctx) : undefined;
       }
       case 'заголовок':
       case 'title':
@@ -265,7 +396,7 @@ export class BslDomDocument implements BslObject {
 
 /** Регистрирует объект `Документ` в браузерном контексте. */
 export function registerDomObjects(ctx: GlobalContext): void {
-  const domDocument = new BslDomDocument();
+  const domDocument = new BslDomDocument(ctx);
   ctx.registerGlobal('Документ', domDocument);
   ctx.registerGlobal('Document', domDocument);
 }
