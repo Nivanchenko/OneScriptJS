@@ -33,7 +33,7 @@
     "oscript": "node dist/cli.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "demo": "vite build && node scripts/copy-examples.mjs && vite preview --port 4173 --open /counter.html"
+    "demo": "vite build && node scripts/copy-examples.mjs && vite preview --port 4173 --open /todo.html"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
