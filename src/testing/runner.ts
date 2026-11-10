@@ -18,6 +18,8 @@ export interface TestResult {
  */
 export function runTests(source: string, env: RuntimeEnvironment): TestResult[] {
   const interpreter = new Interpreter(env);
+  // `ТекущийСценарий()` внутри теста должен ссылаться на сам тестовый модуль.
+  (env as { currentInterpreter?: Interpreter }).currentInterpreter = interpreter;
   interpreter.run(parse(preprocess(tokenize(source))));
 
   const context = new BslTestContext();

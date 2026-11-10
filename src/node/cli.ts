@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   }
 
   const source = arg ? readFileSync(arg, 'utf8') : await readStdin();
-  run(source, createNodeGlobalContext());
+  run(source, createNodeGlobalContext(), arg ? { path: arg } : undefined);
 }
 
 function readStdin(): Promise<string> {

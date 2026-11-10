@@ -23,6 +23,7 @@ import { BslUniqueIdentifier } from './uuid';
 import { registerSystemFunctions } from './system';
 import { registerRegexFunctions } from './regex';
 import { registerRandomFunctions } from './random';
+import { registerScriptFunctions } from './script';
 
 /** Создаёт стандартный глобальный контекст (`Сообщить`, типы и пр.). */
 export function createGlobalContext(): GlobalContext {
@@ -75,6 +76,7 @@ export function createGlobalContext(): GlobalContext {
   registerSystemFunctions(ctx);
   registerRegexFunctions(ctx);
   registerRandomFunctions(ctx);
+  registerScriptFunctions(ctx);
 
   // Библиотека asserts (`#Использовать asserts`): Ожидаем.Что(факт).Равно(…).
   ctx.registerGlobal('Ожидаем', new BslExpect());

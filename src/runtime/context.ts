@@ -1,5 +1,6 @@
 import type { Value } from './values';
 import type { BslObject } from './object';
+import type { Interpreter } from './interpreter';
 
 /** Глобальная функция BSL: принимает значения аргументов, возвращает значение. */
 export type GlobalFunction = (args: Value[]) => Value;
@@ -20,6 +21,13 @@ export class GlobalContext implements RuntimeEnvironment {
   private readonly functions = new Map<string, GlobalFunction>();
   private readonly types = new Map<string, TypeConstructor>();
   private readonly globals = new Map<string, Value>();
+
+  /** Путь к исполняемому сценарию (для `ТекущийСценарий`). */
+  scriptPath?: string;
+  /** Путь к стартовому сценарию (для `СтартовыйСценарий`). */
+  startupScriptPath?: string;
+  /** Интерпретатор исполняемого сценария (для `ТекущийСценарий`). */
+  currentInterpreter?: Interpreter;
 
   register(name: string, fn: GlobalFunction): void {
     this.functions.set(name.toLowerCase(), fn);

@@ -112,6 +112,36 @@ export class Interpreter {
     return undefined;
   }
 
+  /** Есть ли у модуля метод с таким именем. */
+  hasMethod(name: string): boolean {
+    return this.moduleCtx?.methods.has(key(name)) ?? false;
+  }
+
+  /**
+   * Вызывает метод модуля, связывая все параметры по ссылке, и возвращает их
+   * значения после вызова (поддержка out-параметров вроде
+   * `ОбработкаПолученияПредставления(Представление, СтандартнаяОбработка)`).
+   */
+  invokeMethodWithOutputs(name: string, values: Value[]): Value[] {
+    const ctx = this.moduleCtx;
+    if (!ctx) throw new Error('Модуль ещё не выполнен');
+    const method = ctx.methods.get(key(name));
+    if (!method) throw new Error(`Метод '${name}' не найден`);
+    const boxes: Value[] = method.params.map((p, i) =>
+      i < values.length ? values[i] : p.defaultValue ? this.eval(p.defaultValue, ctx.moduleScope, ctx) : undefined,
+    );
+    const localScope = new Scope(ctx.moduleScope);
+    method.params.forEach((p, i) => {
+      localScope.bindRef(p.name, new Ref(() => boxes[i], (v) => { boxes[i] = v; }));
+    });
+    try {
+      this.execGotoBlock(method.body, localScope, ctx);
+    } catch (e) {
+      if (!(e instanceof ReturnSignal)) throw e;
+    }
+    return boxes;
+  }
+
   private execBlock(body: Statement[], scope: Scope, ctx: Ctx): void {
     for (const stmt of body) this.exec(stmt, scope, ctx);
   }
