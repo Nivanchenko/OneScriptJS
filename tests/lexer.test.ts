@@ -20,6 +20,19 @@ describe('лексер', () => {
     expect(tokens[1]).toMatchObject({ type: TokenType.String, value: 'a"b' });
   });
 
+  it('разбирает многострочный литерал с продолжением через |', () => {
+    const tokens = tokenize('"первая\n\t|вторая\n  // комментарий\n  |третья"');
+    expect(tokens[0]).toMatchObject({
+      type: TokenType.String,
+      value: 'первая\nвторая\nтретья',
+    });
+  });
+
+  it('отбрасывает CR в CRLF внутри литерала', () => {
+    const tokens = tokenize('"a\r\n|b"');
+    expect(tokens[0]).toMatchObject({ type: TokenType.String, value: 'a\nb' });
+  });
+
   it('разбирает числа (целые и дробные)', () => {
     const tokens = tokenize('38 1.5');
     expect(tokens[0]).toMatchObject({ type: TokenType.Number, value: 38 });

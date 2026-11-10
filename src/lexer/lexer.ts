@@ -91,6 +91,27 @@ export function tokenize(source: string): Token[] {
           advance();
           break;
         }
+        // Многострочный литерал: `\n` входит в значение, а на следующей строке
+        // отступы/комментарии и символ `|` отбрасываются.
+        if (peek() === '\n') {
+          value += advance();
+          for (;;) {
+            if (peek() === ' ' || peek() === '\t') {
+              advance();
+            } else if (peek() === '/' && peek(1) === '/') {
+              while (offset < source.length && peek() !== '\n') advance();
+              advance(); // перевод строки относится к строке-комментарию
+            } else {
+              break;
+            }
+          }
+          if (peek() === '|') advance();
+          continue;
+        }
+        if (peek() === '\r') {
+          advance(); // CRLF: `\r` не входит в значение
+          continue;
+        }
         value += advance();
       }
       emit(TokenType.String, value);
