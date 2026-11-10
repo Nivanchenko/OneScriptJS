@@ -1,6 +1,7 @@
 import type { BslObject } from '../runtime/object';
 import type { Value } from '../runtime/values';
-import { compare, equals, toBoolean, toStringValue } from '../runtime/values';
+import { compare, equals, toBoolean, toStringValue, typeName } from '../runtime/values';
+import { BslType } from '../runtime/type';
 
 /** Контекст `ЮнитТестирование` (xUnitFor1C): методы-утверждения. */
 export class BslTestContext implements BslObject {
@@ -43,6 +44,17 @@ export class BslTestContext implements BslObject {
       case 'проверитьменьше':
         if (!(compare(args[0]!, args[1]!) < 0)) throw new Error('ПроверитьМеньше: не меньше');
         return undefined;
+      case 'проверитьвхождение':
+        if (!toStringValue(args[0]).includes(toStringValue(args[1]))) {
+          throw new Error(`ПроверитьВхождение: '${fmt(args[0])}' не содержит '${fmt(args[1])}'`);
+        }
+        return undefined;
+      case 'проверитьтип': {
+        const actual = typeName(args[0]!);
+        const expected = args[1] instanceof BslType ? args[1].name : toStringValue(args[1]);
+        if (actual !== expected) throw new Error(`ПроверитьТип: ожидалось '${expected}', получено '${actual}'`);
+        return undefined;
+      }
       default:
         throw new Error(`Метод '${name}' не найден у типа ЮнитТестирование`);
     }

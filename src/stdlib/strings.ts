@@ -63,7 +63,7 @@ export function registerStringFunctions(ctx: GlobalContext): void {
   });
 
   ctx.registerAlias('Символ', 'Char', (args) => String.fromCharCode(n(args, 0)));
-  ctx.registerAlias('КодСимвола', 'CharCode', (args) => s(args, 0).charCodeAt(n(args, 1) - 1));
+  ctx.registerAlias('КодСимвола', 'CharCode', (args) => s(args, 0).charCodeAt((args[1] === undefined ? 1 : n(args, 1)) - 1));
   ctx.registerAlias('НСтр', 'NStr', (args) => s(args, 0));
 
   ctx.registerAlias('ТРег', 'Title', (args) => titleCase(s(args, 0)));

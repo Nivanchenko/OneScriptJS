@@ -84,6 +84,18 @@ describe('парсер', () => {
     });
   });
 
+  it('Не имеет приоритет ниже сравнения (Не a = b → Не (a = b))', () => {
+    const stmt = parseExpr('не 5 = 0');
+    expect(stmt).toMatchObject({
+      kind: 'ExpressionStatement',
+      expression: {
+        kind: 'UnaryExpression',
+        operator: 'не',
+        operand: { kind: 'BinaryExpression', operator: '=' },
+      },
+    });
+  });
+
   it('парсит условие со скобками', () => {
     const stmt = parseExpr('если (возраст > 18) тогда сообщить("x"); конецесли');
     expect(stmt).toMatchObject({

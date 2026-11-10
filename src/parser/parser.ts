@@ -311,13 +311,22 @@ class Parser {
   }
 
   private parseAnd(): Expression {
-    let left = this.parseComparison();
+    let left = this.parseNot();
     while (this.isKeyword(KW_AND)) {
       this.advance();
-      const right = this.parseComparison();
+      const right = this.parseNot();
       left = this.bin('и', left, right);
     }
     return left;
+  }
+
+  /** `Не` — унарный оператор с приоритетом ниже сравнения (`Не a = b` → `Не (a = b)`). */
+  private parseNot(): Expression {
+    if (this.isKeyword(KW_NOT)) {
+      const op = this.advance();
+      return { kind: 'UnaryExpression', pos: this.posOf(op), operator: 'не', operand: this.parseNot() };
+    }
+    return this.parseComparison();
   }
 
   private parseComparison(): Expression {
@@ -358,10 +367,6 @@ class Parser {
     if (this.checkOp('-')) {
       const op = this.advance();
       return { kind: 'UnaryExpression', pos: this.posOf(op), operator: '-', operand: this.parseUnary() };
-    }
-    if (this.isKeyword(KW_NOT)) {
-      const op = this.advance();
-      return { kind: 'UnaryExpression', pos: this.posOf(op), operator: 'не', operand: this.parseUnary() };
     }
     return this.parsePostfix();
   }
