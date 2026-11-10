@@ -1,8 +1,18 @@
 import type { GlobalContext } from '../runtime/context';
+import type { Value } from '../runtime/values';
 import { toNumber } from '../runtime/values';
 
 /** Приведение к 32-битному беззнаковому числу (uint). */
 const u32 = (n: number): number => n >>> 0;
+
+/** Смещение для сдвигов: допустимо 0..31, иначе — ошибка (как в эталоне). */
+function shiftOffset(value: Value): number {
+  const offset = toNumber(value);
+  if (!Number.isInteger(offset) || offset < 0 || offset > 31) {
+    throw new Error(`Неверное значение аргумента: ${offset}`);
+  }
+  return offset;
+}
 
 /** Глобальные поразрядные операции (uint32), см. GlobalBitFunctions.cs. */
 export function registerBitFunctions(ctx: GlobalContext): void {
@@ -14,10 +24,10 @@ export function registerBitFunctions(ctx: GlobalContext): void {
     u32(u32(toNumber(args[0]!)) ^ u32(toNumber(args[1]!))),
   );
   ctx.registerAlias('ПобитовыйСдвигВлево', 'BitShiftLeft', (args) =>
-    u32(u32(toNumber(args[0]!)) << toNumber(args[1]!)),
+    u32(u32(toNumber(args[0]!)) << shiftOffset(args[1]!)),
   );
   ctx.registerAlias('ПобитовыйСдвигВправо', 'BitShiftRight', (args) =>
-    u32(u32(toNumber(args[0]!)) >>> toNumber(args[1]!)),
+    u32(u32(toNumber(args[0]!)) >>> shiftOffset(args[1]!)),
   );
   ctx.registerAlias('ПроверитьБит', 'CheckBit', (args) =>
     (u32(toNumber(args[0]!)) >>> toNumber(args[1]!)) % 2 === 1,
