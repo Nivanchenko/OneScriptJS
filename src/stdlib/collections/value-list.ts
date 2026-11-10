@@ -151,8 +151,11 @@ export class BslValueList implements BslObject {
         this.items.sort((a, b) => a.presentation.localeCompare(b.presentation) * this.direction(args[0]));
         return undefined;
       case 'выгрузитьзначения':
-      case 'unloadvalues':
-        return new BslArray(this.items.map((i) => i.value));
+      case 'unloadvalues': {
+        const arr = new BslArray([]);
+        for (const i of this.items) arr.callMethod('Добавить', [i.value]);
+        return arr;
+      }
       case 'загрузитьзначения':
       case 'loadvalues': {
         const src = args[0];
