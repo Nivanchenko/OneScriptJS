@@ -8,6 +8,7 @@
  */
 import { run } from '../runtime/runner';
 import { createBrowserGlobalContext } from './context';
+import { registerScriptContext, scheduleDeclarativeBinding } from './dom-events';
 
 const ONE_SCRIPT_TAG = 'one-script';
 
@@ -15,7 +16,13 @@ class OneScriptElement extends HTMLElement {
   connectedCallback(): void {
     // Отложить до конца разбора: на момент connectedCallback содержимое элемента
     // может быть ещё не распарсено (элемент подключается до своих дочерних узлов).
-    queueMicrotask(() => run(this.textContent ?? '', createBrowserGlobalContext()));
+    queueMicrotask(() => {
+      const ctx = createBrowserGlobalContext();
+      // Контекст нужен декларативным обработчикам (`data-os-*`) в этом <one-script>.
+      registerScriptContext(this.id || null, ctx);
+      run(this.textContent ?? '', ctx);
+      scheduleDeclarativeBinding();
+    });
   }
 }
 

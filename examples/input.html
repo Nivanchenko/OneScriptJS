@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>OneScript: зеркалирование ввода</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 40rem; }
+    input { font-size: 1rem; padding: .5rem; width: 22rem; }
+    #вывод { display: block; margin-top: 1rem; color: #0b7250; font-size: 1.25rem; }
+  </style>
+</head>
+<body>
+  <h2>Зеркалирование ввода</h2>
+  <p>Атрибут <code>data-os-input</code> вызывает процедуру модуля <code>Отразить()</code> —
+     так не приходится экранировать кавычки в HTML.</p>
+
+  <input id="поле" placeholder="Начните печатать…" data-os-input="Отразить();" />
+  <span id="вывод"></span>
+
+  <script src="/onescript.js"></script>
+
+  <one-script>
+    Вывод = Документ.ПолучитьЭлемент("вывод");
+
+    Процедура Отразить()
+      Поле = Документ.ПолучитьЭлемент("поле");
+      Вывод.Текст = "Вы ввели: " + Поле.Значение;
+    КонецПроцедуры
+  </one-script>
+</body>
+</html>

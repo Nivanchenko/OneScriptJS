@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>OneScript: наведение и уход</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 40rem; }
+    #блок {
+      border: 2px dashed #bbb; border-radius: 10px; padding: 2rem;
+      text-align: center; transition: background .15s, border-color .15s;
+    }
+    #блок.активный { background: #e8f0fe; border-color: #4a7bd0; }
+  </style>
+</head>
+<body>
+  <h2>Наведение и уход</h2>
+  <p>События <code>data-os-mouseenter</code> / <code>data-os-mouseleave</code> меняют класс.</p>
+
+  <div id="блок" data-os-mouseenter="Подсветить(Истина);" data-os-mouseleave="Подсветить(Ложь);">
+    Наведите на меня
+  </div>
+
+  <script src="/onescript.js"></script>
+
+  <one-script>
+    Блок = Документ.ПолучитьЭлемент("блок");
+
+    Процедура Подсветить(Знач Включить)
+      Если Включить Тогда
+        Блок.ДобавитьКласс("активный");
+      Иначе
+        Блок.УбратьКласс("активный");
+      КонецЕсли;
+    КонецПроцедуры
+  </one-script>
+</body>
+</html>

@@ -42,7 +42,7 @@ alias('keydown', 'НажатиеКлавиши', 'KeyDown');
 alias('submit', 'Отправка', 'Submit');
 
 /** Имя события из BSL → тип DOM-события (неизвестные имена передаются как есть). */
-function domEventType(name: string): string {
+export function domEventType(name: string): string {
   return EVENT_ALIASES.get(name.toLowerCase()) ?? name;
 }
 
