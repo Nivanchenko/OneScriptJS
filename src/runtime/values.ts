@@ -95,7 +95,15 @@ export function sortCompare(left: Value, right: Value): number {
   if (typeof left === 'string') return left.localeCompare(right as string);
   if (typeof left === 'boolean') return (left ? 1 : 0) - ((right as boolean) ? 1 : 0);
   if (left instanceof Date) return left.getTime() - (right as Date).getTime();
-  return toStringValue(left).localeCompare(toStringValue(right));
+  return sortKey(left).localeCompare(sortKey(right));
+}
+
+function sortKey(value: Value): string {
+  if (isBslObject(value)) {
+    if (value.toDisplayString) return value.toDisplayString();
+    return value.typeName;
+  }
+  return toStringValue(value);
 }
 
 function sortRank(value: Value): number {
@@ -105,8 +113,8 @@ function sortRank(value: Value): number {
   if (typeof value === 'number') return 3;
   if (typeof value === 'string') return 4;
   if (value instanceof Date) return 5;
-  if (isBslObject(value) && value.typeName === 'Тип') return 6;
-  return 7; // прочие объекты — по строковому представлению
+  if (isBslObject(value) && value.typeName === 'Тип') return 7; // Тип — после объектов
+  return 6; // прочие объекты — по строковому представлению
 }
 
 /** Равенство `=`/`<>`: значения разных типов не равны (кроме Null/Неопределено по идентичности). */

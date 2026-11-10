@@ -7,6 +7,7 @@ import { BslArray } from './collections/array';
 import { BslMap } from './collections/map';
 import { BslStructure } from './collections/structure';
 import { BslValueList } from './collections/value-list';
+import { BslValueTable } from './collections/value-table';
 import { registerStringFunctions } from './strings';
 import { registerMathFunctions } from './math';
 import { registerJsonFunctions } from './json';
@@ -41,6 +42,8 @@ export function createGlobalContext(): GlobalContext {
   ctx.registerType('FixedMap', (args) => new BslMap(args, true, 'ФиксированноеСоответствие'));
   ctx.registerType('СписокЗначений', () => new BslValueList());
   ctx.registerType('ValueList', () => new BslValueList());
+  ctx.registerType('ТаблицаЗначений', () => new BslValueTable());
+  ctx.registerType('ValueTable', () => new BslValueTable());
 
   registerStringFunctions(ctx);
   registerMathFunctions(ctx);

@@ -20,6 +20,9 @@ export function registerStringFunctions(ctx: GlobalContext): void {
   ctx.registerAlias('СтрДлина', 'StrLen', (args) => s(args, 0).length);
   ctx.registerAlias('ВРег', 'Upper', (args) => s(args, 0).toUpperCase());
   ctx.registerAlias('НРег', 'Lower', (args) => s(args, 0).toLowerCase());
+  ctx.registerAlias('СокрЛП', 'TrimAll', (args) => s(args, 0).trim());
+  ctx.registerAlias('СокрЛ', 'TrimL', (args) => s(args, 0).replace(/^\s+/, ''));
+  ctx.registerAlias('СокрП', 'TrimR', (args) => s(args, 0).replace(/\s+$/, ''));
 
   ctx.registerAlias('Лев', 'Left', (args) => s(args, 0).slice(0, n(args, 1)));
   ctx.registerAlias('Прав', 'Right', (args) => {
