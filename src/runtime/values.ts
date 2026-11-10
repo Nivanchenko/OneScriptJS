@@ -82,6 +82,33 @@ export function compare(left: Value, right: Value): number {
   throw new TypeError(`Нельзя сравнить ${typeName(left)} и ${typeName(right)}`);
 }
 
+/**
+ * Сравнение для сортировки коллекций (аналог `GenericIValueComparer` из 1С).
+ * Разные типы упорядочиваются: Неопределено < Null < Булево < Число < Строка <
+ * Дата < Тип < объекты (по строковому представлению).
+ */
+export function sortCompare(left: Value, right: Value): number {
+  const lr = sortRank(left);
+  const rr = sortRank(right);
+  if (lr !== rr) return lr - rr;
+  if (typeof left === 'number') return left - (right as number);
+  if (typeof left === 'string') return left.localeCompare(right as string);
+  if (typeof left === 'boolean') return (left ? 1 : 0) - ((right as boolean) ? 1 : 0);
+  if (left instanceof Date) return left.getTime() - (right as Date).getTime();
+  return toStringValue(left).localeCompare(toStringValue(right));
+}
+
+function sortRank(value: Value): number {
+  if (value === undefined) return 0;
+  if (value === null) return 1;
+  if (typeof value === 'boolean') return 2;
+  if (typeof value === 'number') return 3;
+  if (typeof value === 'string') return 4;
+  if (value instanceof Date) return 5;
+  if (isBslObject(value) && value.typeName === 'Тип') return 6;
+  return 7; // прочие объекты — по строковому представлению
+}
+
 /** Равенство `=`/`<>`: значения разных типов не равны (кроме Null/Неопределено по идентичности). */
 export function equals(left: Value, right: Value): boolean {
   if (left === null || left === undefined || right === null || right === undefined) {
