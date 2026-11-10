@@ -19,6 +19,7 @@ import { registerEnums } from './enums';
 import { registerFormatFunction } from './format';
 import { BslExpect } from './asserts';
 import { registerBinaryFunctions } from './binary';
+import { BslUniqueIdentifier } from './uuid';
 
 /** Создаёт стандартный глобальный контекст (`Сообщить`, типы и пр.). */
 export function createGlobalContext(): GlobalContext {
@@ -57,6 +58,8 @@ export function createGlobalContext(): GlobalContext {
   ctx.registerType('ValueTable', () => new BslValueTable());
   ctx.registerType('ДеревоЗначений', () => new BslValueTree());
   ctx.registerType('ValueTree', () => new BslValueTree());
+  ctx.registerType('УникальныйИдентификатор', (args) => new BslUniqueIdentifier(args));
+  ctx.registerType('UUID', (args) => new BslUniqueIdentifier(args));
 
   registerStringFunctions(ctx);
   registerMathFunctions(ctx);
