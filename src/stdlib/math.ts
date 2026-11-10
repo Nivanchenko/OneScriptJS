@@ -10,4 +10,13 @@ export function registerMathFunctions(ctx: GlobalContext): void {
   ctx.register('Pow', (args) => Math.pow(toNumber(args[0]!), toNumber(args[1]!)));
   ctx.registerAlias('ТекущаяДата', 'CurrentDate', () => new Date());
   ctx.registerAlias('ТекущаяУниверсальнаяДата', 'CurrentUniversalDate', () => new Date());
+  ctx.registerAlias('Дата', 'Date', (args) => {
+    const y = toNumber(args[0]!);
+    const m = toNumber(args[1] ?? 1);
+    const d = toNumber(args[2] ?? 1);
+    const hh = args[3] !== undefined ? toNumber(args[3]) : 0;
+    const mm = args[4] !== undefined ? toNumber(args[4]) : 0;
+    const ss = args[5] !== undefined ? toNumber(args[5]) : 0;
+    return new Date(Date.UTC(y, m - 1, d, hh, mm, ss));
+  });
 }

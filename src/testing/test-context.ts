@@ -1,6 +1,6 @@
 import type { BslObject } from '../runtime/object';
 import type { Value } from '../runtime/values';
-import { equals, toBoolean, toStringValue } from '../runtime/values';
+import { compare, equals, toBoolean, toStringValue } from '../runtime/values';
 
 /** Контекст `ЮнитТестирование` (xUnitFor1C): методы-утверждения. */
 export class BslTestContext implements BslObject {
@@ -22,15 +22,26 @@ export class BslTestContext implements BslObject {
         return undefined;
       case 'проверить':
       case 'assert':
+      case 'проверитьверно':
+      case 'asserttrue':
         if (!toBoolean(args[0]!)) throw new Error('Проверить: условие ложно');
         return undefined;
       case 'проверитьистина':
-      case 'asserttrue':
+      case 'проверитьистину':
         if (!toBoolean(args[0]!)) throw new Error('ПроверитьИстина: получена ложь');
         return undefined;
       case 'проверитьложь':
       case 'assertfalse':
         if (toBoolean(args[0]!)) throw new Error('ПроверитьЛожь: получена истина');
+        return undefined;
+      case 'проверитьзаполнено':
+        if (!toBoolean(args[0]!)) throw new Error('ПроверитьЗаполнено: значение пустое');
+        return undefined;
+      case 'проверитьбольше':
+        if (!(compare(args[0]!, args[1]!) > 0)) throw new Error('ПроверитьБольше: не больше');
+        return undefined;
+      case 'проверитьменьше':
+        if (!(compare(args[0]!, args[1]!) < 0)) throw new Error('ПроверитьМеньше: не меньше');
         return undefined;
       default:
         throw new Error(`Метод '${name}' не найден у типа ЮнитТестирование`);

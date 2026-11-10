@@ -35,9 +35,9 @@ function format(args: Value[]): Value {
   return toStringValue(value ?? '');
 }
 
-/** Числовой параметр формата: `ЧДЦ=2` → 2; пусто/нет → null. */
+/** Числовой параметр формата: `ЧДЦ=2` → 2; `ЧДЦ=-2` → -2; пусто/нет → null. */
 function matchInt(fs: string, key: string): number | null {
-  const m = fs.match(new RegExp(`${key}\\s*=\\s*(\\d+)`));
+  const m = fs.match(new RegExp(`${key}\\s*=\\s*(-?\\d+)`));
   return m ? Number(m[1]) : null;
 }
 
@@ -86,7 +86,8 @@ function formatNumber(value: number, fs: string): string {
   const zero = matchParam(fs, 'ЧН');
   if (value === 0 && zero !== null) return zero;
 
-  const decimals = matchInt(fs, 'ЧДЦ');
+  const decimalsRaw = matchInt(fs, 'ЧДЦ');
+  const decimals = decimalsRaw !== null ? Math.max(0, decimalsRaw) : null;
   const total = matchInt(fs, 'ЧЦ');
   const locale = matchParam(fs, 'Л');
   const fracSep = matchParam(fs, 'ЧРД');

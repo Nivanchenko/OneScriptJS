@@ -7,8 +7,8 @@ const BOOLEAN_FALSE = new Set(['ложь', 'false']);
 const UNDEFINED = new Set(['неопределено', 'undefined']);
 const NULL = new Set(['null']);
 
-const IDENT_START = /[A-Za-zА-Яа-яЁё_]/;
-const IDENT_PART = /[A-Za-zА-Яа-яЁё0-9_]/;
+const IDENT_START = /[A-Za-zА-Яа-яЁё\u0370-\u03FF_]/;
+const IDENT_PART = /[A-Za-zА-Яа-яЁё\u0370-\u03FF0-9_]/;
 const DIGIT = /[0-9]/;
 
 const TWO_CHAR_OPERATORS = new Set(['<=', '>=', '<>']);
@@ -57,7 +57,7 @@ export function tokenize(source: string): Token[] {
 
     const ch = peek();
 
-    if (ch === ' ' || ch === '\t' || ch === '\r' || ch === '\n') {
+    if (ch === ' ' || ch === '\t' || ch === '\r' || ch === '\n' || ch === '\uFEFF') {
       advance();
       continue;
     }
