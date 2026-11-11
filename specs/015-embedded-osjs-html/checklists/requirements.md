@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Встроенный `.osjs` в HTML — редакторные инструменты внутри `<one-script>`
+# Specification Quality Checklist: Встроенный `.osjs` в HTML — редакторные инструменты внутри `<script type="text/osjs">`
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-11-12
