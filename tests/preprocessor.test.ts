@@ -46,8 +46,29 @@ describe('препроцессор', () => {
     const imports = (source: string) => preprocessScript(tokenize(source)).imports;
 
     it('собирает путь в кавычках и номер строки', () => {
-      expect(imports('сообщить("до");\n#Использовать "lib/Модуль.os"')).toEqual([
-        { path: 'lib/Модуль.os', line: 2 },
+      expect(imports('\n\n#Использовать "lib/Модуль.os"')).toEqual([
+        { path: 'lib/Модуль.os', line: 3 },
+      ]);
+    });
+
+    it('запрещает директиву после кода', () => {
+      expect(() => imports('сообщить("до");\n#Использовать "lib/Модуль.os"')).toThrow(
+        'должна быть расположена в начале модуля',
+      );
+      expect(() => imports('Перем X;\n#Использовать "lib/Модуль.os"')).toThrow(
+        'должна быть расположена в начале модуля',
+      );
+      expect(() => imports('X = 1;\n#Использовать asserts')).toThrow(
+        'должна быть расположена в начале модуля',
+      );
+    });
+
+    it('позволяет директиву после #Области и неактивного кода', () => {
+      expect(imports('#Область Импорты\n#Использовать "a.os"')).toEqual([
+        { path: 'a.os', line: 2 },
+      ]);
+      expect(imports('#Если Ложь Тогда\nсообщить("нет");\n#КонецЕсли\n#Использовать "a.os"')).toEqual([
+        { path: 'a.os', line: 4 },
       ]);
     });
 

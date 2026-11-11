@@ -50,6 +50,8 @@ export function preprocessScript(tokens: Token[]): PreprocessResult {
   const imports: ImportDirective[] = [];
   const stack: CondCtx[] = [];
   const isEmitting = (): boolean => stack.every((c) => c.thisActive);
+  // В эталоне #Использовать — аннотация модуля: она допустима только до кода.
+  let sawCode = false;
 
   for (const token of tokens) {
     if (token.type === TokenType.EndOfFile) {
@@ -64,6 +66,11 @@ export function preprocessScript(tokens: Token[]): PreprocessResult {
         // no-op
       } else if (DIR_USE.has(directive)) {
         if (isEmitting()) {
+          if (sawCode) {
+            throw new Error(
+              `Директива #Использовать должна быть расположена в начале модуля (строка ${token.line})`,
+            );
+          }
           const path = parseImportPath(rest, token.line);
           if (path !== undefined) imports.push({ path, line: token.line });
         }
@@ -90,7 +97,10 @@ export function preprocessScript(tokens: Token[]): PreprocessResult {
       continue;
     }
 
-    if (isEmitting()) result.push(token);
+    if (isEmitting()) {
+      result.push(token);
+      sawCode = true;
+    }
   }
 
   return { tokens: result, imports };
