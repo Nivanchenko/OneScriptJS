@@ -80,6 +80,7 @@ math, bitwise, json, types, enums, format) → `src/browser/onescript.ts` (`<one
 | `006-dynamic-names` | Разрешение имён в `Выполнить`/`Вычислить` («Неизвестный символ») | spec |
 | `007-browser-playwright` | Приёмка в реальном браузере (Playwright) | spec |
 | `008-use-directive` | `#Использовать "<файл>"`: модули и классы из файлов | реализовано |
+| `009-module-structure` | Порядок секций модуля и контекст операторов (паритет парсера) | реализовано |
 
 Для незавершённых спек следующий шаг — `/speckit-plan` или `/speckit-tasks` в её каталоге; `008-use-directive` реализована.
 
