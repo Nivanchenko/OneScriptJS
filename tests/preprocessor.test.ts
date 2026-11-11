@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { run } from '../src/runtime/runner';
 import { createGlobalContext } from '../src/stdlib/global-context';
+import { tokenize } from '../src/lexer/lexer';
+import { preprocessScript } from '../src/parser/preprocessor';
 
 function exec(source: string): unknown[] {
   const logs: unknown[] = [];
@@ -38,5 +40,66 @@ describe('препроцессор', () => {
 
   it('#Использовать игнорируется', () => {
     expect(exec('#Использовать asserts\nсообщить("работает");')).toEqual(['работает']);
+  });
+
+  describe('извлечение импортов', () => {
+    const imports = (source: string) => preprocessScript(tokenize(source)).imports;
+
+    it('собирает путь в кавычках и номер строки', () => {
+      expect(imports('\n\n#Использовать "lib/Модуль.os"')).toEqual([
+        { path: 'lib/Модуль.os', line: 3 },
+      ]);
+    });
+
+    it('запрещает директиву после кода', () => {
+      expect(() => imports('сообщить("до");\n#Использовать "lib/Модуль.os"')).toThrow(
+        'должна быть расположена в начале модуля',
+      );
+      expect(() => imports('Перем X;\n#Использовать "lib/Модуль.os"')).toThrow(
+        'должна быть расположена в начале модуля',
+      );
+      expect(() => imports('X = 1;\n#Использовать asserts')).toThrow(
+        'должна быть расположена в начале модуля',
+      );
+    });
+
+    it('позволяет директиву после #Области и неактивного кода', () => {
+      expect(imports('#Область Импорты\n#Использовать "a.os"')).toEqual([
+        { path: 'a.os', line: 2 },
+      ]);
+      expect(imports('#Если Ложь Тогда\nсообщить("нет");\n#КонецЕсли\n#Использовать "a.os"')).toEqual([
+        { path: 'a.os', line: 4 },
+      ]);
+    });
+
+    it('понимает английский алиас #Use', () => {
+      expect(imports('#Use "lib/Module.os"')).toEqual([{ path: 'lib/Module.os', line: 1 }]);
+    });
+
+    it('отбрасывает хвостовой комментарий', () => {
+      expect(imports('#Использовать "a.os" // нужен модуль')).toEqual([{ path: 'a.os', line: 1 }]);
+    });
+
+    it('поддерживает экранированную кавычку ""', () => {
+      expect(imports('#Использовать "a""b.os"')).toEqual([{ path: 'a"b.os', line: 1 }]);
+    });
+
+    it('не считает импортом имя без кавычек', () => {
+      expect(imports('#Использовать asserts')).toEqual([]);
+    });
+
+    it('не собирает директиву в неактивной ветке #Если', () => {
+      expect(imports('#Если Ложь Тогда\n#Использовать "a.os"\n#КонецЕсли')).toEqual([]);
+    });
+
+    it('собирает директиву в активной ветке #Если', () => {
+      expect(imports('#Если Истина Тогда\n#Использовать "a.os"\n#КонецЕсли')).toEqual([
+        { path: 'a.os', line: 2 },
+      ]);
+    });
+
+    it('запрещает пустой путь', () => {
+      expect(() => imports('#Использовать ""')).toThrow('Пустой путь в директиве #Использовать');
+    });
   });
 });

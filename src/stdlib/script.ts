@@ -1,6 +1,6 @@
 import { tokenize } from '../lexer/lexer';
 import { parse } from '../parser/parser';
-import { preprocess } from '../parser/preprocessor';
+import { preprocessScript } from '../parser/preprocessor';
 import { Interpreter } from '../runtime/interpreter';
 import type { GlobalContext } from '../runtime/context';
 import type { BslObject } from '../runtime/object';
@@ -26,11 +26,29 @@ export class BslScript implements BslObject {
     private readonly path?: string,
   ) {}
 
+  /** Пока метод исполняется, `ТекущийСценарий()` указывает на этот сценарий. */
+  private withCurrent<T>(action: () => T): T {
+    const state = this.interpreter.env as {
+      currentInterpreter?: Interpreter;
+      scriptPath?: string;
+    };
+    const previousInterpreter = state.currentInterpreter;
+    const previousPath = state.scriptPath;
+    state.currentInterpreter = this.interpreter;
+    state.scriptPath = this.path;
+    try {
+      return action();
+    } finally {
+      state.currentInterpreter = previousInterpreter;
+      state.scriptPath = previousPath;
+    }
+  }
+
   callMethod(name: string, args: Value[]): Value {
-    if (!this.interpreter.hasMethod(name)) {
+    if (!this.interpreter.hasExportedMethod(name)) {
       throw new Error(`Метод '${name}' не найден у типа Сценарий`);
     }
-    return this.interpreter.invokeMethod(name, args);
+    return this.withCurrent(() => this.interpreter.callExportedMethod(name, args));
   }
 
   getProp(name: string): Value {
@@ -45,11 +63,16 @@ export class BslScript implements BslObject {
       case 'name':
         return baseName(this.path ?? '');
       default:
+        if (this.interpreter.hasExportedVar(name)) return this.interpreter.getExportedVar(name);
         throw new Error(`Свойство '${name}' не найдено у типа Сценарий`);
     }
   }
 
-  setProp(name: string): void {
+  setProp(name: string, value: Value): void {
+    if (this.interpreter.hasExportedVar(name)) {
+      this.interpreter.setExportedVar(name, value);
+      return;
+    }
     throw new Error(`Свойство '${name}' недоступно для записи`);
   }
 
@@ -64,25 +87,52 @@ export class BslScript implements BslObject {
   /** `Строка(Сценарий)`; учитывает `ОбработкаПолученияПредставления`. */
   toDisplayString(): string {
     if (this.interpreter.hasMethod('ОбработкаПолученияПредставления')) {
-      const out = this.interpreter.invokeMethodWithOutputs('ОбработкаПолученияПредставления', ['', true]);
+      const out = this.withCurrent(() =>
+        this.interpreter.invokeMethodWithOutputs('ОбработкаПолученияПредставления', ['', true]),
+      );
       if (out[1] === false) return toStringValue(out[0] ?? '');
     }
     return 'Сценарий';
   }
 }
 
-/** Загружает исходник как `Сценарий`: разбирает и исполняет его тело. */
-function loadScript(env: GlobalContext, source: string, path?: string): BslScript {
+/**
+ * Загружает исходник как `Сценарий`: разбирает и исполняет его тело.
+ * Импорты резолвятся загрузчиком текущего запуска относительно `path`
+ * (или пути исполняемого сценария), поэтому работают и в динамике.
+ */
+export function loadScriptFromSource(
+  env: GlobalContext,
+  source: string,
+  path?: string,
+): BslScript {
+  const { tokens, imports } = preprocessScript(tokenize(source));
+  if (imports.length > 0) {
+    const host = env.modules;
+    if (!host) throw new Error('Импорт файлов не поддерживается текущим контекстом исполнения');
+    host.importAll(imports, path ?? env.basePath ?? env.scriptPath ?? '');
+  }
   const interpreter = new Interpreter(env);
-  interpreter.run(parse(preprocess(tokenize(source))));
+  // Во время тела сценария `ТекущийСценарий()` уже указывает на него.
+  const previousInterpreter = env.currentInterpreter;
+  const previousPath = env.scriptPath;
+  env.currentInterpreter = interpreter;
+  env.scriptPath = path;
+  try {
+    interpreter.run(parse(tokens));
+  } finally {
+    env.currentInterpreter = previousInterpreter;
+    env.scriptPath = previousPath;
+  }
   return new BslScript(interpreter, path);
 }
 
 /** Регистрирует `ЗагрузитьСценарийИзСтроки`, `ТекущийСценарий`, `СтартовыйСценарий`. */
 export function registerScriptFunctions(ctx: GlobalContext): void {
-  ctx.registerAlias('ЗагрузитьСценарийИзСтроки', 'LoadScriptFromString', (args) =>
-    loadScript(ctx, toStringValue(args[0] ?? '')),
-  );
+  ctx.registerAlias('ЗагрузитьСценарийИзСтроки', 'LoadScriptFromString', (args) => {
+    const name = args[1] === undefined ? undefined : toStringValue(args[1]);
+    return loadScriptFromSource(ctx, toStringValue(args[0] ?? ''), name || undefined);
+  });
 
   // shortcut: текущий сценарий — тот, что запущен через run(); вложенные
   // ЗагрузитьСценарийИзСтроки не подменяют его (нужно для рефлексии, T45).

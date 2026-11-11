@@ -29,6 +29,7 @@ interface Ctx {
   methods: Map<string, MethodDeclaration>;
   moduleScope: Scope;
   moduleVars: Set<string>;
+  exportedVars: Set<string>;
   currentError: string | null;
 }
 
@@ -53,7 +54,7 @@ const key = (name: string): string => name.toLowerCase();
 export class Interpreter {
   private moduleCtx: Ctx | null = null;
 
-  constructor(private readonly env: RuntimeEnvironment) {}
+  constructor(readonly env: RuntimeEnvironment) {}
 
   /** Оценивает константное выражение (для препроцессора). */
   static evaluate(expr: Expression): Value {
@@ -61,6 +62,7 @@ export class Interpreter {
       methods: new Map(),
       moduleScope: new Scope(),
       moduleVars: new Set(),
+      exportedVars: new Set(),
       currentError: null,
     };
     const env: RuntimeEnvironment = {
@@ -77,14 +79,17 @@ export class Interpreter {
       methods: new Map(),
       moduleScope: new Scope(),
       moduleVars: new Set(),
+      exportedVars: new Set(),
       currentError: null,
     };
     for (const stmt of program.body) {
       if (stmt.kind === 'MethodDeclaration') ctx.methods.set(key(stmt.name), stmt);
       else if (stmt.kind === 'VariableDeclaration') {
+        const exported = new Set((stmt.exportedNames ?? []).map(key));
         for (const name of stmt.names) {
           ctx.moduleVars.add(key(name));
           ctx.moduleScope.set(name, undefined);
+          if (exported.has(key(name))) ctx.exportedVars.add(key(name));
         }
       }
     }
@@ -131,6 +136,54 @@ export class Interpreter {
   /** Есть ли у модуля метод с таким именем. */
   hasMethod(name: string): boolean {
     return this.moduleCtx?.methods.has(key(name)) ?? false;
+  }
+
+  /** Есть ли у модуля экспортный метод с таким именем. */
+  hasExportedMethod(name: string): boolean {
+    return this.moduleCtx?.methods.get(key(name))?.exported ?? false;
+  }
+
+  /** Вызывает экспортный метод модуля; неэкспортный снаружи недоступен. */
+  callExportedMethod(name: string, values: Value[]): Value {
+    if (!this.hasExportedMethod(name)) throw new Error(`Метод '${name}' не найден`);
+    return this.invokeMethod(name, values);
+  }
+
+  /** Объявлена ли переменная с таким именем как экспортная. */
+  hasExportedVar(name: string): boolean {
+    return this.moduleCtx?.exportedVars.has(key(name)) ?? false;
+  }
+
+  getExportedVar(name: string): Value {
+    const ctx = this.requireCtx();
+    if (!ctx.exportedVars.has(key(name))) throw new Error(`Свойство '${name}' не найдено`);
+    return ctx.moduleScope.get(name);
+  }
+
+  setExportedVar(name: string, value: Value): void {
+    const ctx = this.requireCtx();
+    if (!ctx.exportedVars.has(key(name))) throw new Error(`Свойство '${name}' не найдено`);
+    ctx.moduleScope.set(name, value);
+  }
+
+  /** Есть ли в модуле конструктор `ПриСозданииОбъекта`/`OnObjectCreate`. */
+  hasConstructor(): boolean {
+    return this.getConstructor() !== undefined;
+  }
+
+  getConstructor(): MethodDeclaration | undefined {
+    const ctx = this.moduleCtx;
+    if (!ctx) return undefined;
+    return ctx.methods.get(key('ПриСозданииОбъекта')) ?? ctx.methods.get(key('OnObjectCreate'));
+  }
+
+  getMethod(name: string): MethodDeclaration | undefined {
+    return this.moduleCtx?.methods.get(key(name));
+  }
+
+  private requireCtx(): Ctx {
+    if (!this.moduleCtx) throw new Error('Модуль ещё не выполнен');
+    return this.moduleCtx;
   }
 
   /**

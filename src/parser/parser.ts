@@ -62,6 +62,10 @@ function isLValue(expr: Expression): expr is LValue {
 class Parser {
   private current = 0;
   private readonly eof: Token;
+  /** Контекст исполнения для проверок `Возврат`/`Прервать`/`Продолжить`/`ВызватьИсключение`. */
+  private methodKind: 'procedure' | 'function' | null = null;
+  private loopDepth = 0;
+  private exceptDepth = 0;
 
   constructor(private readonly tokens: Token[]) {
     this.eof = tokens[tokens.length - 1]!;
@@ -70,8 +74,46 @@ class Parser {
   parse(): Program {
     const start = this.peek();
     const body: Statement[] = [];
-    while (!this.isEnd()) body.push(this.parseStatement());
+
+    // Канонический порядок секций модуля: переменные → методы → исполняемый код
+    // (DefaultBslParser: BuildVariablesSection → BuildMethodsSection → BuildModuleBody).
+    this.skipModuleSeparators();
+    while (this.isKeyword(KW_VAR)) {
+      body.push(this.parseVariableDeclaration());
+      this.skipModuleSeparators();
+    }
+
+    while (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) {
+      body.push(this.parseMethod());
+      this.skipModuleSeparators();
+    }
+
+    while (!this.isEnd()) {
+      if (this.isKeyword(KW_VAR)) {
+        this.error(
+          'объявления переменных должны быть расположены в начале модуля, процедуры или функции',
+        );
+      }
+      if (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) {
+        this.error('объявление метода должно быть расположено до исполняемого кода');
+      }
+      body.push(this.parseStatement());
+      this.skipModuleSeparators();
+    }
+
     return { kind: 'Program', pos: this.posOf(start), body };
+  }
+
+  /** Пропускает `;`, пустые операторы и аннотации между секциями модуля. */
+  private skipModuleSeparators(): void {
+    for (;;) {
+      if (this.matchEndOfStatement()) continue;
+      if (this.checkOp('&')) {
+        this.skipAnnotation();
+        continue;
+      }
+      break;
+    }
   }
 
   // --- операторы ---
@@ -81,9 +123,15 @@ class Parser {
     while (this.matchEndOfStatement()) { /* пустой оператор `;;` */ }
 
     if (this.isKeyword(KW_IF)) return this.parseIf();
-    if (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) return this.parseMethod();
+    if (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) {
+      this.error('объявление метода должно быть расположено до исполняемого кода');
+    }
     if (this.isKeyword(KW_RETURN)) return this.parseReturn();
-    if (this.isKeyword(KW_VAR)) return this.parseVariableDeclaration();
+    if (this.isKeyword(KW_VAR)) {
+      this.error(
+        'объявления переменных должны быть расположены в начале модуля, процедуры или функции',
+      );
+    }
     if (this.isKeyword(KW_FOR)) return this.parseFor();
     if (this.isKeyword(KW_WHILE)) return this.parseWhile();
     if (this.isKeyword(KW_BREAK)) return this.parseBreak();
@@ -145,6 +193,8 @@ class Parser {
   private parseMethod(): Statement {
     const start = this.advance(); // 'процедура' | 'функция'
     const isFunction = KW_FUNCTION.has(start.lexeme.toLowerCase());
+    const previousMethod = this.methodKind;
+    this.methodKind = isFunction ? 'function' : 'procedure';
     const name = this.expectIdentifier();
     this.expectOp('(');
     const params: MethodParameter[] = [];
@@ -156,10 +206,18 @@ class Parser {
     this.expectOp(')');
     const exported = this.matchKeyword(KW_EXPORT);
     const endKw = isFunction ? KW_ENDFUNCTION : KW_ENDPROCEDURE;
+
     const body: Statement[] = [];
+    this.skipModuleSeparators();
+    while (this.isKeyword(KW_VAR)) {
+      body.push(this.parseVariableDeclaration());
+      this.skipModuleSeparators();
+    }
     while (!this.isEnd() && !this.isKeyword(endKw)) body.push(this.parseStatement());
+
     this.expectKeyword(endKw);
     this.matchEndOfStatement();
+    this.methodKind = previousMethod;
     return {
       kind: 'MethodDeclaration',
       pos: this.posOf(start),
@@ -183,6 +241,15 @@ class Parser {
     const start = this.advance(); // 'возврат'
     let value: Expression | undefined;
     if (this.peek().type !== TokenType.EndOfStatement) value = this.parseExpression();
+
+    if (this.methodKind === null) {
+      this.error('Оператор "Возврат" может использоваться только внутри метода');
+    } else if (this.methodKind === 'function' && value === undefined) {
+      this.error('Функция должна возвращать значение');
+    } else if (this.methodKind === 'procedure' && value !== undefined) {
+      this.error('Процедуры не могут возвращать значение');
+    }
+
     this.expectEndOfStatement();
     return { kind: 'ReturnStatement', pos: this.posOf(start), value };
   }
@@ -190,12 +257,19 @@ class Parser {
   private parseVariableDeclaration(): Statement {
     const start = this.advance(); // 'перем'
     const names: string[] = [];
+    const exportedNames: string[] = [];
     do {
-      names.push(this.expectIdentifier().lexeme);
-      this.matchKeyword(KW_EXPORT);
+      const name = this.expectIdentifier().lexeme;
+      names.push(name);
+      if (this.matchKeyword(KW_EXPORT)) exportedNames.push(name);
     } while (this.matchOp(','));
     this.expectEndOfStatement();
-    return { kind: 'VariableDeclaration', pos: this.posOf(start), names };
+    return {
+      kind: 'VariableDeclaration',
+      pos: this.posOf(start),
+      names,
+      ...(exportedNames.length > 0 ? { exportedNames } : {}),
+    };
   }
 
   private parseFor(): Statement {
@@ -232,12 +306,18 @@ class Parser {
 
   private parseBreak(): Statement {
     const start = this.advance();
+    if (this.loopDepth === 0) {
+      this.error('Оператор "Прервать" может использоваться только внутри цикла');
+    }
     this.expectEndOfStatement();
     return { kind: 'BreakStatement', pos: this.posOf(start) };
   }
 
   private parseContinue(): Statement {
     const start = this.advance();
+    if (this.loopDepth === 0) {
+      this.error('Оператор "Продолжить" может использоваться только внутри цикла');
+    }
     this.expectEndOfStatement();
     return { kind: 'ContinueStatement', pos: this.posOf(start) };
   }
@@ -246,7 +326,13 @@ class Parser {
     const start = this.expectKeyword(KW_TRY);
     const tryBody = this.parseStatementsUntil(KW_EXCEPT);
     this.expectKeyword(KW_EXCEPT);
-    const exceptBody = this.parseStatementsUntil(KW_ENDTRY);
+    this.exceptDepth += 1;
+    let exceptBody: Statement[];
+    try {
+      exceptBody = this.parseStatementsUntil(KW_ENDTRY);
+    } finally {
+      this.exceptDepth -= 1;
+    }
     this.expectKeyword(KW_ENDTRY);
     this.matchEndOfStatement();
     return { kind: 'TryExceptStatement', pos: this.posOf(start), tryBody, exceptBody };
@@ -256,6 +342,11 @@ class Parser {
     const start = this.advance(); // 'вызватьисключение'
     let value: Expression | undefined;
     if (this.peek().type !== TokenType.EndOfStatement) value = this.parseExpression();
+    if (value === undefined && this.exceptDepth === 0) {
+      this.error(
+        'Оператор "ВызватьИсключение" без параметров может использоваться только в блоке "Исключение"',
+      );
+    }
     this.expectEndOfStatement();
     return { kind: 'RaiseStatement', pos: this.posOf(start), value };
   }
@@ -269,7 +360,12 @@ class Parser {
 
   private parseLoopBody(): Statement[] {
     const body: Statement[] = [];
-    while (!this.isEnd() && !this.isKeyword(KW_ENDLOOP)) body.push(this.parseStatement());
+    this.loopDepth += 1;
+    try {
+      while (!this.isEnd() && !this.isKeyword(KW_ENDLOOP)) body.push(this.parseStatement());
+    } finally {
+      this.loopDepth -= 1;
+    }
     this.expectKeyword(KW_ENDLOOP);
     this.matchEndOfStatement();
     return body;

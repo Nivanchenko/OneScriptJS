@@ -129,6 +129,8 @@ export interface ReturnStatement extends Node {
 export interface VariableDeclaration extends Node {
   kind: 'VariableDeclaration';
   names: string[];
+  /** Подмножество `names`, объявленных с `Экспорт`. */
+  exportedNames?: string[];
 }
 export interface ForLoop extends Node {
   kind: 'ForLoop';

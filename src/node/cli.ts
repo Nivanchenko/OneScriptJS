@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { run, version } from '../index';
 import { createNodeGlobalContext } from './context';
+import { collectModuleSources, resolveNodePath } from './module-source';
 
 async function main(): Promise<void> {
   const arg = process.argv[2];
@@ -22,8 +24,21 @@ async function main(): Promise<void> {
     return;
   }
 
-  const source = arg ? readFileSync(arg, 'utf8') : await readStdin();
-  run(source, createNodeGlobalContext(), arg ? { path: arg } : undefined);
+  if (arg) {
+    const entryPath = resolve(arg);
+    const source = readFileSync(entryPath, 'utf8');
+    const modules = collectModuleSources(entryPath, source);
+    run(source, createNodeGlobalContext(), {
+      path: arg,
+      basePath: entryPath,
+      modules,
+      resolve: resolveNodePath,
+    });
+    return;
+  }
+
+  const source = await readStdin();
+  run(source, createNodeGlobalContext());
 }
 
 function readStdin(): Promise<string> {
