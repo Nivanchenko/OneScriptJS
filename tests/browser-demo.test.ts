@@ -50,6 +50,19 @@ describe('демо-страницы examples/', () => {
     expect(window.document.getElementById('вывод')?.textContent).toBe('3');
   });
 
+  it('delegation.html: один обработчик на контейнере определяет нажатую кнопку', () => {
+    const window = loadDemo('delegation.html');
+    const buttons = window.document.querySelectorAll('#панель button');
+    const result = window.document.getElementById('результат');
+
+    (buttons[0] as unknown as HTMLElement).click();
+    expect(result?.textContent).toBe('Нажато: Отлично (data-choice=Отлично)');
+
+    // Вложенный <span>: цель — сам span, обработчик поднимается до кнопки.
+    (buttons[1]!.querySelector('span') as unknown as HTMLElement).click();
+    expect(result?.textContent).toBe('Нажато: Хорошо (data-choice=Хорошо)');
+  });
+
   it('input.html: ввод зеркалируется в span', () => {
     const window = loadDemo('input.html');
     const input = window.document.getElementById('поле') as unknown as HTMLInputElement;
@@ -75,5 +88,53 @@ describe('демо-страницы examples/', () => {
     expect(card).not.toBeNull();
     expect(card!.querySelectorAll('li').length).toBe(3);
     expect(card!.querySelector('button')?.textContent).toBe('Выделить карточку');
+  });
+
+  it('collections.html: таблица значений рендерится в DOM-отчёт', () => {
+    const window = loadDemo('collections.html');
+    const report = window.document.getElementById('отчёт');
+    const table = report?.querySelector('table');
+    expect(table).not.toBeNull();
+    expect(table!.querySelector('caption')?.textContent).toBe('Отчёт по складу');
+    expect(table!.querySelectorAll('thead th').length).toBe(4);
+
+    const rows = table!.querySelectorAll('tbody tr');
+    expect(rows.length).toBe(3);
+    const firstRowCells = Array.from(rows[0]!.querySelectorAll('td')).map((cell) => cell.textContent);
+    expect(firstRowCells).toEqual(['Монитор', '18000,00 руб.', '2', '36000,00 руб.']);
+
+    const footer = table!.querySelector('tfoot')?.textContent ?? '';
+    expect(footer).toContain('Итого, позиций: 3');
+    expect(footer).toContain('49500,00 руб.');
+    expect(window.document.getElementById('итог')?.textContent).toBe(
+      'Всего по складу: 49500,00 руб. Позиции: Монитор · Клавиатура · Мышь.',
+    );
+  });
+
+  it('strings-json.html: строки, Формат и JSON выводятся в <pre>', () => {
+    const window = loadDemo('strings-json.html');
+    const output = window.document.getElementById('вывод')?.textContent ?? '';
+    expect(output).toContain('СтрШаблон: Привет, мир! Сегодня пятница.');
+    expect(output).toContain('3 части: яблоко | банан | груша');
+    expect(output).toContain('СтрЗаменить: путь домой');
+    expect(output).toContain('Формат числа: 1 234 567,50');
+    expect(output).toContain('Формат даты: 11.11.2026 15:30');
+    expect(output).toContain('ЗаписатьJSON: {"имя":"Анна","город":"Москва","возраст":30}');
+    expect(output).toContain('ПрочитатьJSON: имя = Анна, город = Москва, возраст = 30');
+  });
+
+  it('form.html: submit отменяется, приветствие показывается', () => {
+    const window = loadDemo('form.html');
+    const form = window.document.getElementById('форма') as unknown as HTMLElement;
+    const input = window.document.getElementById('имя') as unknown as HTMLInputElement;
+    input.value = 'Анна';
+
+    const event = new window.Event('submit', { bubbles: true, cancelable: true }) as unknown as Event;
+    const notCanceled = form.dispatchEvent(event);
+    expect(notCanceled).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
+    expect(window.document.getElementById('результат')?.textContent).toBe(
+      'Привет, Анна! Событие: submit.',
+    );
   });
 });

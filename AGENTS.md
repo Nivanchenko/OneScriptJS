@@ -38,6 +38,7 @@
 | Собрать Node-библиотеку (`dist/node/`) | `pnpm build:node` |
 | Полная сборка (типы + браузер + Node) | `pnpm build` |
 | Запустить тесты | `pnpm test` |
+| Проверить, что API задокументирован в справочнике | `pnpm check:docs` |
 | Тесты в watch-режиме | `pnpm test:watch` |
 | Dev-сервер (для `examples/`) | `pnpm build:browser && pnpm dev` |
 | Статическая сборка + preview | `pnpm demo` |
@@ -60,7 +61,10 @@ OneScriptJS/
 ├── tests/                  ← юнит-тесты Vitest
 ├── examples/               ← HTML-примеры (hello.html — приёмочный сценарий)
 ├── docs/
-│   └── architecture.md     ← карта «C# → TypeScript» и план слоёв
+│   ├── architecture.md     ← карта «C# → TypeScript» и план слоёв
+│   ├── bsl-surface.md      ← синтаксис и stdlib BSL по эталонным тестам
+│   ├── reference.md        ← справочник API (функции, объекты, перечисления)
+│   └── status.md           ← статус переноса
 └── reference/              ← исходник OneScript на C# (не коммитится)
 ```
 
@@ -95,7 +99,8 @@ OneScriptJS/
    Доступен скилл `generic-superpowers-test-driven-development`.
 3. **Проверка перед «готово»** — прогнать `pnpm typecheck && pnpm test` (и при
    необходимости `pnpm build`), показать вывод как доказательство
-   (`generic-superpowers-verification-before-completion`).
+   (`generic-superpowers-verification-before-completion`). Менял API/stdlib —
+   прогони `pnpm check:docs` и обнови справочник, если он отстал (правило 9).
 4. **BSL-имена двуязычные** — как в оригинале, поддерживать русские и английские
    алиасы идентификаторов (`Сообщить`/`Message`, `Если`/`If` и т.п.).
 5. **Не трогать `reference/`** — только читать. Это эталон для сверки поведения.
@@ -104,6 +109,13 @@ OneScriptJS/
 7. **Стиль** — 2 пробела, LF, строгий TypeScript; `.editorconfig` обязателен.
 8. **Файлы в браузер** — `onescript.ts` использует только браузерные API;
    общая логика живёт в `src/`, не в `src/browser/`.
+9. **Синхронизация API и справочника** — расширяешь stdlib или язык (новая
+   функция, тип, объект, метод, свойство, перечисление; изменение сигнатуры или
+   поведения) — в том же изменении обнови [`docs/reference.md`](docs/reference.md).
+   Справочник — часть definition of done, наравне с тестами; если меняются
+   пользовательские сценарии, обнови также README и `examples/`.
+   Расхождение ловят `pnpm check:docs` (имя из `src/` не найдено в справочнике —
+   exit 1) и Vitest-тест `tests/check-api-docs.test.ts` (входит в `pnpm test`).
 
 ## 7. Философия разработки: «ленивый сеньор» (Ponytail)
 
@@ -163,6 +175,8 @@ OneScriptJS/
 
 ## 8. Связанные документы
 
+- [`docs/reference.md`](docs/reference.md) — полный справочник API: функции с
+  параметрами/возвратом, объекты с полями и методами, перечисления.
 - [`task.md`](task.md) — исходное ТЗ и приёмочный HTML-пример.
 - [`docs/architecture.md`](docs/architecture.md) — карта слоёв и статус переноса.
 - [`specs/`](specs/) — спецификации незавершённых работ (001–007); план и задачи

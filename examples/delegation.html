@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>OneScript: один обработчик на много кнопок</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 40rem; padding: 0 1rem; }
+    #панель { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; }
+    button { font: inherit; padding: .5rem 1rem; cursor: pointer; }
+    #результат { color: #0b7250; font-size: 1.15rem; }
+    code { background: #f0f0f0; padding: 0 .2rem; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h2>Один обработчик на много кнопок</h2>
+  <p>Обработчик висит на контейнере <code>data-os-click</code>, а клики всплывают от кнопок.
+     <code>Событие.Цель</code> — реально нажатый элемент (целью может быть и вложенный
+     <code>&lt;span&gt;</code>), поэтому в обработчике видно, какая кнопка сработала.</p>
+
+  <div id="панель" role="group" aria-label="Оценка" data-os-click="Нажали(Событие.Цель);">
+    <button type="button" data-choice="Отлично">Отлично</button>
+    <button type="button" data-choice="Хорошо"><span>Хорошо</span></button>
+    <button type="button" data-choice="Плохо">Плохо</button>
+  </div>
+
+  <p id="результат" role="status" aria-live="polite">Ничего не выбрано.</p>
+
+  <script src="/onescript.js"></script>
+
+  <one-script>
+    Перем Результат;
+
+    Процедура Нажали(Знач Цель)
+      // Цель — нажатый элемент; при вложенной разметке поднимаемся до кнопки
+      Кнопка = Цель;
+      Пока Кнопка <> Неопределено И Кнопка.ИмяТега <> "button" Цикл
+        Кнопка = Кнопка.Родитель;
+      КонецЦикла;
+      Если Кнопка = Неопределено Тогда
+        Возврат;
+      КонецЕсли;
+
+      Выбор = Кнопка.ПолучитьАтрибут("data-choice");
+      Результат.Текст = "Нажато: " + Кнопка.Текст + " (data-choice=" + Строка(Выбор) + ")";
+      Сообщить(Результат.Текст);
+    КонецПроцедуры
+
+    Результат = Документ.ПолучитьЭлемент("результат");
+  </one-script>
+</body>
+</html>

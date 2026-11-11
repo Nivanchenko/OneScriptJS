@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>OneScript: форма и события</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 40rem; padding: 0 1rem; }
+    form { display: flex; flex-direction: column; gap: .5rem; margin: 1rem 0; }
+    label { font-weight: 600; }
+    input { font: inherit; padding: .5rem; max-width: 22rem; }
+    button { font: inherit; padding: .5rem 1rem; align-self: flex-start; cursor: pointer; }
+    #результат { color: #0b7250; font-size: 1.15rem; }
+    code { background: #f0f0f0; padding: 0 .2rem; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h2>Форма и события</h2>
+  <p>Атрибут <code>data-os-submit</code> вызывает процедуру <code>Отправить()</code>.
+     Объект <code>Событие</code> создаётся движком в момент DOM-события (на каждое событие —
+     новый) и доступен только в inline-коде обработчика, поэтому тип события передаётся
+     в процедуру аргументом. Стандартную отправку формы отменяет
+     <code>Событие.Отменить()</code>.</p>
+
+  <form id="форма" data-os-submit="Событие.Отменить(); Отправить(Событие.Тип);">
+    <label for="имя">Ваше имя</label>
+    <input id="имя" name="имя" autocomplete="name" placeholder="Например, Анна" />
+    <button type="submit">Поздороваться</button>
+  </form>
+
+  <p id="результат" role="status" aria-live="polite">Введите имя и нажмите кнопку.</p>
+
+  <script src="/onescript.js"></script>
+
+  <one-script>
+    Перем ПолеИмени;
+    Перем Результат;
+
+    Процедура Отправить(Знач ТипСобытия)
+      Имя = СокрЛП(ПолеИмени.Значение);
+      Если Имя = "" Тогда
+        Результат.Текст = "Имя не указано — отправка отменена. Событие: " + ТипСобытия + ".";
+      Иначе
+        Результат.Текст = "Привет, " + Имя + "! Событие: " + ТипСобытия + ".";
+      КонецЕсли;
+    КонецПроцедуры
+
+    ПолеИмени = Документ.ПолучитьЭлемент("имя");
+    Результат = Документ.ПолучитьЭлемент("результат");
+  </one-script>
+</body>
+</html>
