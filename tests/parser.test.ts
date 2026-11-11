@@ -335,4 +335,24 @@ describe('парсер', () => {
   it('бросает ошибку при отсутствии конецесли', () => {
     expect(() => parse(tokenize('если Истина тогда сообщить("x");'))).toThrow(/ключевое слово/);
   });
+
+  it('парсит ДобавитьОбработчик с методом текущего модуля', () => {
+    expect(parseExpr('ДобавитьОбработчик Источник.МоеСобытие, Обработчик')).toMatchObject({
+      kind: 'AddHandlerStatement',
+      eventSource: { kind: 'Identifier', name: 'Источник' },
+      eventName: { kind: 'StringLiteral', value: 'МоеСобытие' },
+      handlerTarget: null,
+      handlerMethod: { kind: 'StringLiteral', value: 'Обработчик' },
+    });
+  });
+
+  it('парсит ДобавитьОбработчик с обработчиком-свойством объекта', () => {
+    expect(parseExpr('ДобавитьОбработчик Источник.МоеСобытие, ЭтотОбъект.Метод')).toMatchObject({
+      kind: 'AddHandlerStatement',
+      eventSource: { kind: 'Identifier', name: 'Источник' },
+      eventName: { kind: 'StringLiteral', value: 'МоеСобытие' },
+      handlerTarget: { kind: 'Identifier', name: 'ЭтотОбъект' },
+      handlerMethod: { kind: 'StringLiteral', value: 'Метод' },
+    });
+  });
 });
