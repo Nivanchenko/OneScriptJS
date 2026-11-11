@@ -49,7 +49,7 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 **⚠️ CRITICAL**: задачи US1–US3 не начинаются, пока фаза не завершена.
 
 - [x] T002 [P] Добавить AST-узлы `AddHandlerStatement` / `RemoveHandlerStatement` в `src/ast/nodes.ts` и включить их в union `Statement`; поля строго по `data-model.md` §1: `eventSource: Expression`, `eventName: Expression`, `handlerTarget: Expression | null`, `handlerMethod: Expression`
-- [ ] T003 [P] Добавить опциональный `hasMethod?(name: string): boolean` в интерфейс `BslObject` в `src/runtime/object.ts` (не менять существующие реализации)
+- [x] T003 [P] Добавить опциональный `hasMethod?(name: string): boolean` в интерфейс `BslObject` в `src/runtime/object.ts` (не менять существующие реализации)
 - [ ] T004 [P] Написать падающие unit-тесты реестра в `tests/events-registry.test.ts`: порядок вызовов, дедупликация по `(target по ссылке, method.toLowerCase())`, `raise` без подписчиков = no-op, независимость источников, исключение в обработчике прерывает цепочку и не перехватывается (FR-010)
 - [ ] T005 Реализовать `EventProcessor` в `src/runtime/events.ts`: `Map<BslObject, Map<string, Handler[]>>`; `Handler { target: BslObject; method: string; invoke: (args: Value[]) => Value }`; `add` (дедупликация по `(target, method.toLowerCase())`; при `local: true` проверка `hasMethod` не выполняется) и `raise` (список копируется перед обходом, исключения обработчиков не перехватываются) — сделать T004 зелёным
 - [ ] T006 [P] Подключить реестр к окружению: `events?: EventProcessor` в `RuntimeEnvironment` (`src/runtime/context.ts`) и создание экземпляра в `createGlobalContext` (`src/stdlib/global-context.ts`)
