@@ -77,7 +77,7 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 ### Implementation for User Story 1
 
 - [x] T011 [P] [US1] Парсер: `KW_ADD_HANDLER = {добавитьобработчик, addhandler}` и `parseHandler('add')` в `src/parser/parser.ts` — разбор member-источника `Объект.Событие` и обработчика в формах `Identifier` (`handlerTarget = null`) / member; индексные формы и сообщения об ошибках — в US3; тесты разбора — в `tests/parser.test.ts`
-- [ ] T012 [P] [US1] Интерпретатор: `case 'AddHandlerStatement'` в `exec` (`src/runtime/interpreter.ts`) — вычислить `eventSource`, `eventName`, `handlerTarget` (`null` → `scriptObject` с `local: true`; объектная форма → `local: false`), `handlerMethod`; вызвать `env.events.add(...)`
+- [x] T012 [P] [US1] Интерпретатор: `case 'AddHandlerStatement'` в `exec` (`src/runtime/interpreter.ts`) — вычислить `eventSource`, `eventName`, `handlerTarget` (`null` → `scriptObject` с `local: true`; объектная форма → `local: false`), `handlerMethod`; вызвать `env.events.add(...)`
 - [ ] T013 [US1] Сделать сценарии T010 зелёными; прогнать `pnpm typecheck && pnpm test`
 
 **Checkpoint (MVP)**: подписка и доставка работают; `tests/events.test.ts` (US1) зелёные.

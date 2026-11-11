@@ -1,4 +1,5 @@
 import type {
+  AddHandlerStatement,
   BinaryExpression,
   CallExpression,
   Expression,
@@ -307,6 +308,9 @@ export class Interpreter {
       case 'ExecuteStatement':
         this.execDynamic(toStringValue(this.eval(stmt.value, scope, ctx)), scope, ctx);
         break;
+      case 'AddHandlerStatement':
+        this.execAddHandler(stmt, scope, ctx);
+        break;
       case 'LabelStatement':
         break; // маркер — no-op
       case 'GotoStatement':
@@ -314,8 +318,31 @@ export class Interpreter {
     }
   }
 
-  private execForLoop(stmt: ForLoop, scope: Scope, ctx: Ctx): void {
-    const from = toNumber(this.eval(stmt.from, scope, ctx));
+  /** Подписка: `ДобавитьОбработчик <источник>.<событие>, <обработчик>`. */
+  private execAddHandler(stmt: AddHandlerStatement, scope: Scope, ctx: Ctx): void {
+    const events = this.env.events;
+    if (!events) throw new Error('Реестр событий недоступен в этом окружении');
+    const source = this.eval(stmt.eventSource, scope, ctx);
+    if (!isBslObject(source)) {
+      throw new Error(`Источник события должен быть объектом, а не ${typeName(source)}`);
+    }
+    const eventName = toStringValue(this.eval(stmt.eventName, scope, ctx));
+    const method = toStringValue(this.eval(stmt.handlerMethod, scope, ctx));
+    if (stmt.handlerTarget === null) {
+      // Локальная форма: метод текущего модуля, проверка экспорта не нужна.
+      events.add(source, eventName, this.getThisObject(), method, true, (args) =>
+        this.invokeMethod(method, args),
+      );
+      return;
+    }
+    const target = this.eval(stmt.handlerTarget, scope, ctx);
+    if (!isBslObject(target)) {
+      throw new Error(`Обработчик должен быть объектом, а не ${typeName(target)}`);
+    }
+    events.add(source, eventName, target, method, false);
+  }
+
+  private execForLoop(stmt: ForLoop, scope: Scope, ctx: Ctx): void {    const from = toNumber(this.eval(stmt.from, scope, ctx));
     const to = toNumber(this.eval(stmt.to, scope, ctx));
     let completed = true;
     for (let i = from; i <= to; i++) {
