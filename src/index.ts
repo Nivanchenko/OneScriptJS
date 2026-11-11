@@ -1,4 +1,5 @@
 import { run } from './runtime/runner';
+import type { MaybePromise } from './runtime/async';
 import { createGlobalContext } from './stdlib/global-context';
 
 // Публичное API движка.
@@ -27,6 +28,6 @@ export function version(): string {
 }
 
 /** Выполняет исходник BSL со стандартной библиотекой (вывод `Сообщить` → console.log). */
-export function runScript(source: string): void {
-  run(source, createGlobalContext());
+export function runScript(source: string): MaybePromise<void> {
+  return run(source, createGlobalContext());
 }

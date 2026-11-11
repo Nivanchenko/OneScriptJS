@@ -11,7 +11,8 @@ function toJson(value: Value): unknown {
     if (value.typeName === 'Структура' || value.typeName === 'ФиксированнаяСтруктура') {
       const obj: Record<string, unknown> = {};
       for (const key of value.iterate?.() ?? []) {
-        obj[String(key)] = toJson(value.getProp(String(key)));
+        // shortcut: свойства Структуры отдаются синхронно; async-getter в JSON не поддержан
+        obj[String(key)] = toJson(value.getProp(String(key)) as Value);
       }
       return obj;
     }

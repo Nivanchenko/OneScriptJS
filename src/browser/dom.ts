@@ -217,9 +217,12 @@ export class BslDomElement implements BslObject {
     this.offEvent(domType);
     const listener: EventListener = (event) => {
       try {
-        this.interpreter().executeInModule(code, { 'Событие': new BslDomEvent(event, this.ctx) });
+        const result = this.interpreter().executeInModule(code, { 'Событие': new BslDomEvent(event, this.ctx) });
+        // Обработчик DOM нельзя дождаться: ошибки async-части не должны ломать страницу.
+        void Promise.resolve(result).catch((e: unknown) => {
+          console.error(`Ошибка в обработчике события '${domType}':`, e instanceof Error ? e.message : e);
+        });
       } catch (e) {
-        // Ошибка в обработчике не должна ломать страницу.
         console.error(`Ошибка в обработчике события '${domType}':`, e instanceof Error ? e.message : e);
       }
     };

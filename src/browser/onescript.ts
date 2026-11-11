@@ -47,10 +47,11 @@ class OneScriptElement extends HTMLElement {
     const baseUrl = document.baseURI;
 
     void preloadModuleSources(source, baseUrl)
-      .then((modules) => {
-        run(source, ctx, { basePath: baseUrl, modules, resolve: resolveUrlPath });
-        scheduleDeclarativeBinding();
-      })
+      .then((modules) =>
+        Promise.resolve(run(source, ctx, { basePath: baseUrl, modules, resolve: resolveUrlPath })).then(
+          () => scheduleDeclarativeBinding(),
+        ),
+      )
       .catch((error: unknown) => {
         console.error(error instanceof Error ? error.message : String(error));
       });

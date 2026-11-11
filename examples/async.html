@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>OneScript: Асинх/Ждать</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 42rem; }
+    output { display: block; font-family: ui-monospace, monospace; margin: 0.5rem 0; }
+    #счётчик { font-size: 2rem; }
+  </style>
+</head>
+<body>
+  <h2>Асинхронная функция и <code>Ждать</code></h2>
+  <p>Async-функция «считает» 500 мс. Нативный счётчик страницы тикает каждые 50 мс —
+     он продолжает расти, пока BSL ждёт результат: страница не замирает.</p>
+  <output id="счётчик">0</output>
+  <output id="журнал"></output>
+
+  <script>
+    let ticks = 0;
+    setInterval(() => {
+      ticks += 1;
+      document.getElementById('счётчик').textContent = String(ticks);
+    }, 50);
+  </script>
+
+  <script src="/onescript.js"></script>
+  <one-script>
+    Асинх Функция Посчитать(Знач Начало, Знач Конец) Экспорт
+      Приостановить(500);
+      Сумма = 0;
+      Для Сч = Начало По Конец Цикл
+        Сумма = Сумма + Сч;
+      КонецЦикла;
+      Возврат Сумма;
+    КонецФункции
+
+    Асинх Процедура ЗаписатьВЖурнал(Знач Текст) Экспорт
+      Приостановить(50);
+      Документ.ПолучитьЭлемент("журнал").Текст = Текст;
+    КонецПроцедуры
+
+    Сообщить("страница готова");
+    Результат = Ждать Посчитать(1, 100);
+    Сообщить("результат: " + Строка(Результат));
+    Ждать ЗаписатьВЖурнал("результат = " + Строка(Результат));
+  </one-script>
+</body>
+</html>

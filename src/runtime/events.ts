@@ -1,5 +1,7 @@
 import type { BslObject } from './object';
 import type { Value } from './values';
+import type { MaybePromise } from './async';
+import { thenMaybe } from './async';
 
 /** Подписка на событие. */
 export interface Handler {
@@ -8,7 +10,7 @@ export interface Handler {
   /** Имя метода в исходном регистре. */
   method: string;
   /** Способ вызова, зафиксированный при подписке. */
-  invoke: (args: Value[]) => Value;
+  invoke: (args: Value[]) => MaybePromise<Value>;
 }
 
 const key = (name: string): string => name.toLowerCase();
@@ -31,7 +33,7 @@ export class EventProcessor {
     target: BslObject,
     method: string,
     local: boolean,
-    invoke?: (args: Value[]) => Value,
+    invoke?: (args: Value[]) => MaybePromise<Value>,
   ): void {
     const name = key(eventName);
     const list = this.handlers.get(source)?.get(name) ?? [];
@@ -57,10 +59,16 @@ export class EventProcessor {
     if (index !== -1) list.splice(index, 1);
   }
 
-  /** Синхронно вызывает подписчиков в порядке подписки; исключения не перехватывает. */
-  raise(source: BslObject, eventName: string, args: Value[]): void {
+  /** Вызывает подписчиков в порядке подписки; исключения не перехватывает. */
+  raise(source: BslObject, eventName: string, args: Value[]): MaybePromise<void> {
     const list = this.handlers.get(source)?.get(key(eventName));
     if (!list) return;
-    for (const handler of [...list]) handler.invoke(args);
+    const snapshot = [...list];
+    const step = (index: number): MaybePromise<void> => {
+      const handler = snapshot[index];
+      if (!handler) return;
+      return thenMaybe(handler.invoke(args), () => step(index + 1));
+    };
+    return step(0);
   }
 }

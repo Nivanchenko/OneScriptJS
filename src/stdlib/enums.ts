@@ -112,6 +112,13 @@ export function registerEnums(ctx: GlobalContext): void {
     'URLВКодировкеURL': 'URLВКодировкеURL', 'URLInURLEncoding': 'URLВКодировкеURL',
   });
 
+  registerEnum(ctx, 'СостояниеФоновогоЗадания', 'СостояниеФоновогоЗадания', 'BackgroundJobState', {
+    'НеВыполнялось': 'НеВыполнялось', 'NotRunned': 'НеВыполнялось',
+    'Активно': 'Активно', 'Active': 'Активно',
+    'Завершено': 'Завершено', 'Completed': 'Завершено',
+    'ЗавершеноАварийно': 'ЗавершеноАварийно', 'Failed': 'ЗавершеноАварийно',
+  });
+
   registerEnum(ctx, 'ПорядокБайтов', 'ПорядокБайтов', 'ByteOrder', {
     'LittleEndian': 'LittleEndian',
     'BigEndian': 'BigEndian',

@@ -1,23 +1,31 @@
 import type { Value } from './values';
+import type { MaybePromise } from './async';
+import type { AsyncTracker } from './promise';
 import type { BslObject } from './object';
 import type { Interpreter } from './interpreter';
 import { EventProcessor } from './events';
 import type { ImportDirective } from '../parser/preprocessor';
 
-/** Глобальная функция BSL: принимает значения аргументов, возвращает значение. */
-export type GlobalFunction = (args: Value[]) => Value;
+/** Глобальная функция BSL: принимает значения аргументов, возвращает значение или Promise. */
+export type GlobalFunction = (args: Value[]) => MaybePromise<Value>;
 
-/** Конструктор типа BSL (для `Новый <Тип>`). */
-export type TypeConstructor = (args: Value[]) => BslObject;
+/** Конструктор типа BSL (для `Новый <Тип>`): может вернуть Promise (async-инициализация). */
+export type TypeConstructor = (args: Value[]) => MaybePromise<BslObject>;
 
 /** Контракт, по которому интерпретатор вызывает глобальные функции, создаёт объекты и резолвит глобальные значения. */
 export interface RuntimeEnvironment {
-  call(name: string, args: Value[]): Value;
-  construct(typeName: string, args: Value[]): Value;
+  call(name: string, args: Value[]): MaybePromise<Value>;
+  construct(typeName: string, args: Value[]): MaybePromise<Value>;
   /** Резолвит глобальное значение (перечисление и т.п.); undefined, если нет. */
   resolveGlobal?(name: string): Value | undefined;
   /** Реестр подписок на события (у стандартного контекста есть всегда). */
   events?: EventProcessor;
+  /** Дождаться активных фоновых заданий и незавершённых `Обещаний` перед завершением. */
+  flushAsync?(): MaybePromise<void>;
+  /** Учёт незавершённого `Обещания` (снимается по `completion`). */
+  trackAsync?(tracker: AsyncTracker): void;
+  /** Необработанная ошибка `Обещания` (по умолчанию — `console.error`). */
+  reportUnhandledError?(error: unknown): void;
 }
 
 /** Реестр, достаточный загрузчику модулей: глобальные имена и типы. */
@@ -53,6 +61,10 @@ export class GlobalContext implements RuntimeEnvironment {
   modules?: ModuleHost;
   /** Платформенное ленивое чтение исходника: Node ставит `fs`, браузер — нет. */
   loadSource?: (path: string) => string;
+  /** Хук: дождаться активных фоновых заданий и `Обещаний` (ставит стандартная библиотека). */
+  flushAsync?: () => MaybePromise<void>;
+  /** Незавершённые `Обещания` текущего запуска. */
+  readonly pendingPromises = new Set<AsyncTracker>();
 
   register(name: string, fn: GlobalFunction): void {
     this.functions.set(name.toLowerCase(), fn);
@@ -80,13 +92,13 @@ export class GlobalContext implements RuntimeEnvironment {
     return this.types.has(name.toLowerCase());
   }
 
-  call(name: string, args: Value[]): Value {
+  call(name: string, args: Value[]): MaybePromise<Value> {
     const fn = this.functions.get(name.toLowerCase());
     if (!fn) throw new Error(`Неизвестная функция: ${name}`);
     return fn(args);
   }
 
-  construct(typeName: string, args: Value[]): Value {
+  construct(typeName: string, args: Value[]): MaybePromise<Value> {
     const ctor = this.types.get(typeName.toLowerCase());
     if (!ctor) throw new Error(`Тип '${typeName}' не найден`);
     return ctor(args);
@@ -94,5 +106,14 @@ export class GlobalContext implements RuntimeEnvironment {
 
   resolveGlobal(name: string): Value | undefined {
     return this.globals.get(name.toLowerCase());
+  }
+
+  trackAsync(tracker: AsyncTracker): void {
+    this.pendingPromises.add(tracker);
+    void tracker.completion.then(() => this.pendingPromises.delete(tracker));
+  }
+
+  reportUnhandledError(error: unknown): void {
+    console.error(error instanceof Error ? error.message : String(error));
   }
 }

@@ -37,6 +37,8 @@ const KW_GOTO = new Set(['перейти', 'goto']);
 const KW_EXECUTE = new Set(['выполнить', 'execute']);
 const KW_ADD_HANDLER = new Set(['добавитьобработчик', 'addhandler']);
 const KW_REMOVE_HANDLER = new Set(['удалитьобработчик', 'removehandler']);
+const KW_ASYNC = new Set(['асинх', 'async']);
+const KW_AWAIT = new Set(['ждать', 'await']);
 
 // Ключевые слова конца блока: завершают оператор без ';'.
 const END_OF_BLOCK = new Set([
@@ -66,6 +68,8 @@ class Parser {
   private readonly eof: Token;
   /** Контекст исполнения для проверок `Возврат`/`Прервать`/`Продолжить`/`ВызватьИсключение`. */
   private methodKind: 'procedure' | 'function' | null = null;
+  /** Тело асинхронного метода: внутри разрешён `Ждать`. */
+  private inAsync = false;
   private loopDepth = 0;
   private exceptDepth = 0;
 
@@ -85,7 +89,7 @@ class Parser {
       this.skipModuleSeparators();
     }
 
-    while (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) {
+    while (this.isMethodStart()) {
       body.push(this.parseMethod());
       this.skipModuleSeparators();
     }
@@ -96,7 +100,7 @@ class Parser {
           'объявления переменных должны быть расположены в начале модуля, процедуры или функции',
         );
       }
-      if (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) {
+      if (this.isMethodStart()) {
         this.error('объявление метода должно быть расположено до исполняемого кода');
       }
       body.push(this.parseStatement());
@@ -125,7 +129,7 @@ class Parser {
     while (this.matchEndOfStatement()) { /* пустой оператор `;;` */ }
 
     if (this.isKeyword(KW_IF)) return this.parseIf();
-    if (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) {
+    if (this.isMethodStart()) {
       this.error('объявление метода должно быть расположено до исполняемого кода');
     }
     if (this.isKeyword(KW_RETURN)) return this.parseReturn();
@@ -195,11 +199,18 @@ class Parser {
   }
 
   private parseMethod(): Statement {
+    const isAsync = this.isAsyncModifier();
+    const asyncToken = isAsync ? this.advance() : undefined;
     const start = this.advance(); // 'процедура' | 'функция'
     const isFunction = KW_FUNCTION.has(start.lexeme.toLowerCase());
     const previousMethod = this.methodKind;
+    const previousAsync = this.inAsync;
     this.methodKind = isFunction ? 'function' : 'procedure';
+    this.inAsync = isAsync;
     const name = this.expectIdentifier();
+    if (isAsync && ['присозданииобъекта', 'onobjectcreate'].includes(name.lexeme.toLowerCase())) {
+      this.error('Асинхронный конструктор не поддерживается');
+    }
     this.expectOp('(');
     const params: MethodParameter[] = [];
     if (!this.checkOp(')')) {
@@ -222,11 +233,13 @@ class Parser {
     this.expectKeyword(endKw);
     this.matchEndOfStatement();
     this.methodKind = previousMethod;
+    this.inAsync = previousAsync;
     return {
       kind: 'MethodDeclaration',
-      pos: this.posOf(start),
+      pos: this.posOf(asyncToken ?? start),
       name: name.lexeme,
       isFunction,
+      isAsync,
       exported,
       params,
       body,
@@ -516,6 +529,8 @@ class Parser {
   }
 
   private parseUnary(): Expression {
+    const awaitExpr = this.tryParseAwait();
+    if (awaitExpr) return awaitExpr;
     if (this.checkOp('+')) {
       const op = this.advance();
       return { kind: 'UnaryExpression', pos: this.posOf(op), operator: '+', operand: this.parseUnary() };
@@ -525,6 +540,73 @@ class Parser {
       return { kind: 'UnaryExpression', pos: this.posOf(op), operator: '-', operand: this.parseUnary() };
     }
     return this.parsePostfix();
+  }
+
+  // --- контекстные Асинх/Ждать ---
+
+  private isAsyncModifier(): boolean {
+    const token = this.peek();
+    return token.type === TokenType.Identifier && KW_ASYNC.has(token.lexeme.toLowerCase());
+  }
+
+  private isKeywordAt(offset: number, keywords: Set<string>): boolean {
+    const token = this.tokens[this.current + offset];
+    return (
+      token !== undefined &&
+      token.type === TokenType.Identifier &&
+      keywords.has(token.lexeme.toLowerCase())
+    );
+  }
+
+  /** Начало объявления метода, в т.ч. с модификатором `Асинх`. */
+  private isMethodStart(): boolean {
+    if (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) return true;
+    return (
+      this.isAsyncModifier() &&
+      (this.isKeywordAt(1, KW_PROCEDURE) || this.isKeywordAt(1, KW_FUNCTION))
+    );
+  }
+
+  private isAwaitKeyword(): boolean {
+    const token = this.peek();
+    return token.type === TokenType.Identifier && KW_AWAIT.has(token.lexeme.toLowerCase());
+  }
+
+  /** Начинается ли с токена выражение (для отличия `Ждать X` от имени `Ждать`). */
+  private startsExpression(token: Token | undefined): boolean {
+    if (!token) return false;
+    switch (token.type) {
+      case TokenType.Number:
+      case TokenType.String:
+      case TokenType.Boolean:
+      case TokenType.Date:
+      case TokenType.Null:
+      case TokenType.Undefined:
+        return true;
+      case TokenType.Identifier:
+        return !END_OF_BLOCK.has(token.lexeme.toLowerCase());
+      case TokenType.Operator:
+        // `Ждать (...)` трактуется как вызов имени `Ждать` (как в эталоне).
+        return token.lexeme === '+' || token.lexeme === '-' || token.lexeme === '?';
+      default:
+        return false;
+    }
+  }
+
+  private tryParseAwait(): Expression | null {
+    if (!this.isAwaitKeyword()) return null;
+    const next = this.tokens[this.current + 1];
+    if (!this.startsExpression(next)) return null; // `Ждать` — обычный идентификатор
+    if (next !== undefined && next.type === TokenType.Identifier && KW_AWAIT.has(next.lexeme.toLowerCase())) {
+      this.error('Нельзя ожидать результат ожидания');
+    }
+    // `inAsync` — тело асинхронного метода; `methodKind === null` — тело модуля (расширение).
+    if (!this.inAsync && this.methodKind !== null) {
+      this.error('Ждать допустим только в асинхронном методе или теле модуля');
+    }
+    const token = this.advance();
+    const operand = this.parseUnary();
+    return { kind: 'AwaitExpression', pos: this.posOf(token), operand };
   }
 
   private parsePrimary(): Expression {
