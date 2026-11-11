@@ -496,6 +496,14 @@ export class Interpreter {
       if (lower === 'информацияобошибке' || lower === 'errorinfo') {
         return new BslErrorInfo(ctx.currentError ?? '');
       }
+      // shortcut: ВызватьСобытие живёт здесь — событие объявляется на объекте текущего модуля.
+      if (lower === 'вызватьсобытие') {
+        const name = toStringValue(this.eval(expr.args[0]!, scope, ctx));
+        const value = expr.args[1] === undefined ? undefined : this.eval(expr.args[1]!, scope, ctx);
+        const params = isBslObject(value) && value.iterate ? value.iterate() : [];
+        this.env.events?.raise(this.getThisObject(), name, params);
+        return undefined;
+      }
       const method = ctx.methods.get(lower);
       if (method) return this.callMethod(method, expr.args, scope, ctx);
       return this.env.call(expr.callee.name, expr.args.map((a) => this.eval(a, scope, ctx)));

@@ -113,6 +113,9 @@ export function loadScriptFromSource(
     host.importAll(imports, path ?? env.basePath ?? env.scriptPath ?? '');
   }
   const interpreter = new Interpreter(env);
+  // `ЭтотОбъект`/`ВызватьСобытие` внутри сценария относятся к объекту этого сценария.
+  const scriptObject = new BslScript(interpreter, path);
+  interpreter.ownerObject = scriptObject;
   // Во время тела сценария `ТекущийСценарий()` уже указывает на него.
   const previousInterpreter = env.currentInterpreter;
   const previousPath = env.scriptPath;
@@ -124,7 +127,7 @@ export function loadScriptFromSource(
     env.currentInterpreter = previousInterpreter;
     env.scriptPath = previousPath;
   }
-  return new BslScript(interpreter, path);
+  return scriptObject;
 }
 
 /** Регистрирует `ЗагрузитьСценарийИзСтроки`, `ТекущийСценарий`, `СтартовыйСценарий`. */
