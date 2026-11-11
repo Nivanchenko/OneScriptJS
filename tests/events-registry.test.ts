@@ -114,3 +114,58 @@ describe('EventProcessor', () => {
     expect(log).toEqual(['первый.Обработчик']);
   });
 });
+
+describe('EventProcessor.remove', () => {
+  it('снимает подписку: обработчик больше не вызывается', () => {
+    const events = new EventProcessor();
+    const log: string[] = [];
+    const source = target(log, 'источник');
+    const handler = target(log, 'обработчик');
+    events.add(source, 'Событие', handler, 'Обработчик', false);
+    events.remove(source, 'Событие', handler, 'Обработчик');
+
+    events.raise(source, 'Событие', []);
+
+    expect(log).toEqual([]);
+  });
+
+  it('отсутствующая подписка — no-op без ошибки', () => {
+    const events = new EventProcessor();
+    const source = target([], 'источник');
+    const handler = target([], 'обработчик');
+
+    expect(() => events.remove(source, 'Событие', handler, 'Обработчик')).not.toThrow();
+  });
+
+  it('не меняет порядок остальных обработчиков', () => {
+    const events = new EventProcessor();
+    const log: string[] = [];
+    const source = target(log, 'источник');
+    const first = target(log, 'первый');
+    const second = target(log, 'второй');
+    const third = target(log, 'третий');
+    events.add(source, 'Событие', first, 'Обработчик', false);
+    events.add(source, 'Событие', second, 'Обработчик', false);
+    events.add(source, 'Событие', third, 'Обработчик', false);
+
+    events.remove(source, 'Событие', second, 'Обработчик');
+    events.raise(source, 'Событие', []);
+
+    expect(log).toEqual(['первый.Обработчик', 'третий.Обработчик']);
+  });
+
+  it('снимает только подходящую пару (регистр имени не влияет)', () => {
+    const events = new EventProcessor();
+    const log: string[] = [];
+    const source = target(log, 'источник');
+    const first = target(log, 'первый');
+    const second = target(log, 'второй');
+    events.add(source, 'Событие', first, 'Обработчик', false);
+    events.add(source, 'Событие', second, 'Обработчик', false);
+
+    events.remove(source, 'событие', first, 'обработчик');
+    events.raise(source, 'Событие', []);
+
+    expect(log).toEqual(['второй.Обработчик']);
+  });
+});

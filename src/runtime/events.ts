@@ -49,6 +49,14 @@ export class EventProcessor {
     });
   }
 
+  /** Снимает подписку; отсутствующая — no-op, порядок остальных не меняется. */
+  remove(source: BslObject, eventName: string, target: BslObject, method: string): void {
+    const list = this.handlers.get(source)?.get(key(eventName));
+    if (!list) return;
+    const index = list.findIndex((h) => h.target === target && key(h.method) === key(method));
+    if (index !== -1) list.splice(index, 1);
+  }
+
   /** Синхронно вызывает подписчиков в порядке подписки; исключения не перехватывает. */
   raise(source: BslObject, eventName: string, args: Value[]): void {
     const list = this.handlers.get(source)?.get(key(eventName));
