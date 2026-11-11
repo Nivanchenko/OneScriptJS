@@ -23,6 +23,8 @@ import { add, compare, dateFromBsl, equals, toBoolean, toNumber, toStringValue, 
 import type { Value } from './values';
 import type { RuntimeEnvironment } from './context';
 import { isBslObject } from './object';
+import type { BslObject } from './object';
+import { ScriptModuleObject } from './script-object';
 import { BslErrorInfo } from './error-info';
 
 interface Ctx {
@@ -53,8 +55,18 @@ const key = (name: string): string => name.toLowerCase();
 /** Tree-walking интерпретатор BSL. */
 export class Interpreter {
   private moduleCtx: Ctx | null = null;
+  /** Объект текущего модуля; у загруженного сценария подменяется на `BslScript`. */
+  ownerObject?: BslObject;
+  private moduleObject?: ScriptModuleObject;
 
   constructor(readonly env: RuntimeEnvironment) {}
+
+  /** `ЭтотОбъект` — объект текущего модуля (лениво создаётся). */
+  getThisObject(): BslObject {
+    if (this.ownerObject) return this.ownerObject;
+    this.moduleObject ??= new ScriptModuleObject(this);
+    return this.moduleObject;
+  }
 
   /** Оценивает константное выражение (для препроцессора). */
   static evaluate(expr: Expression): Value {
@@ -96,8 +108,10 @@ export class Interpreter {
     const executable = program.body.filter(
       (s) => s.kind !== 'MethodDeclaration' && s.kind !== 'VariableDeclaration',
     );
-    this.execGotoBlock(executable, ctx.moduleScope, ctx);
+    // Модуль «существует» уже во время исполнения своего тела: `ЭтотОбъект` и
+    // события должны работать в том числе из инициализирующего кода.
     this.moduleCtx = ctx;
+    this.execGotoBlock(executable, ctx.moduleScope, ctx);
   }
 
   /** Вызывает метод модуля по имени с готовыми значениями (для тестового раннера). */
@@ -386,7 +400,11 @@ export class Interpreter {
       case 'Identifier': {
         const value = scope.get(expr.name);
         if (value !== undefined) return value;
-        return this.env.resolveGlobal?.(expr.name) ?? undefined;
+        const global = this.env.resolveGlobal?.(expr.name);
+        if (global !== undefined) return global;
+        // Встроенное имя: разрешается после области видимости и глобалов.
+        if (key(expr.name) === 'этотобъект') return this.getThisObject();
+        return undefined;
       }
       case 'BinaryExpression':
         return this.evalBinary(expr, scope, ctx);
