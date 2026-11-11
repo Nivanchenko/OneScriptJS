@@ -1,6 +1,7 @@
 import type { Interpreter } from './interpreter';
 import type { BslObject } from './object';
 import type { Value } from './values';
+import type { MaybePromise } from './async';
 
 /**
  * Объект текущего модуля скрипта (`ЭтотОбъект`): доступны только экспортные методы.
@@ -11,9 +12,14 @@ export class ScriptModuleObject implements BslObject {
 
   constructor(private readonly interpreter: Interpreter) {}
 
-  callMethod(name: string, args: Value[]): Value {
+  callMethod(name: string, args: Value[]): MaybePromise<Value> {
     if (!this.hasMethod(name)) throw new Error(`Метод объекта не обнаружен (${name})`);
     return this.interpreter.callExportedMethod(name, args);
+  }
+
+  /** Форкает интерпретатор для фонового задания (общие данные модуля, свой контекст). */
+  forkForJob(task: unknown): Interpreter {
+    return this.interpreter.forkForJob(task);
   }
 
   hasMethod(name: string): boolean {

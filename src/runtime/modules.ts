@@ -7,6 +7,8 @@ import type { ModuleRegistry } from './context';
 import { Interpreter } from './interpreter';
 import { BslClassRef, BslInstance, BslModule, isBslIdentifier, nameFromPath } from './module-objects';
 import type { Value } from './values';
+import type { MaybePromise } from './async';
+import { isThenable, thenMaybe } from './async';
 
 export type ScriptKind = 'module' | 'class';
 
@@ -104,11 +106,16 @@ export class ModuleLoader {
     private readonly loadSource?: (path: string) => string,
   ) {}
 
-  importAll(directives: readonly ImportDirective[], importerPath: string): void {
-    for (const directive of directives) this.importOne(directive.path, importerPath, directive);
+  importAll(directives: readonly ImportDirective[], importerPath: string): MaybePromise<void> {
+    const step = (index: number): MaybePromise<void> => {
+      const directive = directives[index];
+      if (!directive) return;
+      return thenMaybe(this.importOne(directive.path, importerPath, directive), () => step(index + 1));
+    };
+    return step(0);
   }
 
-  private importOne(importPath: string, importerPath: string, directive: ImportDirective): void {
+  private importOne(importPath: string, importerPath: string, directive: ImportDirective): MaybePromise<void> {
     const resolved = this.resolve(importPath, importerPath);
     if (this.cache.has(resolved)) return;
 
@@ -133,21 +140,35 @@ export class ModuleLoader {
     const entry: CacheEntry = { path: resolved, name: def.name, kind: def.kind, state: 'loading' };
     this.cache.set(resolved, entry);
 
+    const track = (value: MaybePromise<void>): MaybePromise<void> => {
+      if (!isThenable(value)) return value;
+      return value.catch((error: unknown) => {
+        this.cache.delete(resolved);
+        throw error;
+      });
+    };
     try {
       if (def.kind === 'module') {
         const module = new BslModule(def.name, () => entry.state === 'ready');
         entry.module = module;
         this.registerModule(def.name, module);
-        this.importAll(def.imports, resolved);
-        const interpreter = new Interpreter(this.env);
-        interpreter.run(def.program);
-        module.attach(interpreter);
-      } else {
-        entry.def = def;
-        this.registerClass(def);
-        this.importAll(def.imports, resolved);
+        return track(
+          thenMaybe(this.importAll(def.imports, resolved), () => {
+            const interpreter = new Interpreter(this.env);
+            return thenMaybe(interpreter.run(def.program), () => {
+              module.attach(interpreter);
+              entry.state = 'ready';
+            });
+          }),
+        );
       }
-      entry.state = 'ready';
+      entry.def = def;
+      this.registerClass(def);
+      return track(
+        thenMaybe(this.importAll(def.imports, resolved), () => {
+          entry.state = 'ready';
+        }),
+      );
     } catch (e) {
       this.cache.delete(resolved);
       throw e;
@@ -180,10 +201,12 @@ export class ModuleLoader {
     this.env.registerType(def.name, (args) => this.createInstance(def, args));
   }
 
-  private createInstance(def: ScriptModuleDef, args: Value[]): BslInstance {
+  private createInstance(def: ScriptModuleDef, args: Value[]): MaybePromise<BslInstance> {
     const interpreter = new Interpreter(this.env);
-    interpreter.run(def.program);
+    return thenMaybe(interpreter.run(def.program), () => this.finishInstance(def, interpreter, args));
+  }
 
+  private finishInstance(def: ScriptModuleDef, interpreter: Interpreter, args: Value[]): MaybePromise<BslInstance> {
     const constructor = interpreter.getConstructor();
     if (!constructor) {
       throw new Error('Конструктор не определен, но переданы параметры конструктора.');
@@ -196,7 +219,6 @@ export class ModuleLoader {
       );
     }
 
-    interpreter.invokeMethod(constructor.name, args);
-    return new BslInstance(def.name, interpreter);
+    return thenMaybe(interpreter.invokeMethod(constructor.name, args), () => new BslInstance(def.name, interpreter));
   }
 }

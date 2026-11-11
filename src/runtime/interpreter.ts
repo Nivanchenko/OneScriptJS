@@ -28,6 +28,8 @@ import { isBslObject } from './object';
 import type { BslObject } from './object';
 import { ScriptModuleObject } from './script-object';
 import { BslErrorInfo } from './error-info';
+import type { BslGenerator, DriveOptions, MaybePromise, SliceController } from './async';
+import { TimeSlicer, drive, isThenable, yieldMaybe, yieldToHost } from './async';
 
 interface Ctx {
   methods: Map<string, MethodDeclaration>;
@@ -35,6 +37,8 @@ interface Ctx {
   moduleVars: Set<string>;
   exportedVars: Set<string>;
   currentError: string | null;
+  /** Фоновое задание, в котором исполняется этот контекст (для `ПолучитьТекущее`). */
+  currentJob?: unknown;
 }
 
 class ReturnSignal {
@@ -54,12 +58,21 @@ class GotoSignal {
 
 const key = (name: string): string => name.toLowerCase();
 
-/** Tree-walking интерпретатор BSL. */
+/**
+ * Tree-walking интерпретатор BSL на генераторах.
+ *
+ * Синхронный скрипт драйвер исполняет до первого `yield` и возвращает обычное значение;
+ * приостановка (`Приостановить`, ожидания фоновых заданий) делает исполнение асинхронным.
+ * Управляющие сигналы — исключения, поэтому они проходят через `yield*`/`gen.throw` так же,
+ * как в синхронной версии.
+ */
 export class Interpreter {
   private moduleCtx: Ctx | null = null;
   /** Объект текущего модуля; у загруженного сценария подменяется на `BslScript`. */
   ownerObject?: BslObject;
   private moduleObject?: ScriptModuleObject;
+  /** Срез квантов: включается только у фоновых заданий. */
+  slicer?: SliceController;
 
   constructor(readonly env: RuntimeEnvironment) {}
 
@@ -68,6 +81,33 @@ export class Interpreter {
     if (this.ownerObject) return this.ownerObject;
     this.moduleObject ??= new ScriptModuleObject(this);
     return this.moduleObject;
+  }
+
+  /** Фоновое задание, в котором исполняется этот контекст (или `Неопределено`). */
+  get currentJob(): unknown {
+    return this.moduleCtx?.currentJob;
+  }
+
+  /**
+   * Форкает интерпретатор для фонового задания: общие данные модуля (методы, переменные,
+   * `ЭтотОбъект`) и собственный `Ctx` (вложенность ошибок, текущее задание, срез квантов).
+   */
+  forkForJob(task: unknown): Interpreter {
+    const source = this.requireCtx();
+    if (!this.ownerObject) this.getThisObject();
+    const fork = new Interpreter(this.env);
+    fork.moduleCtx = {
+      methods: source.methods,
+      moduleScope: source.moduleScope,
+      moduleVars: source.moduleVars,
+      exportedVars: source.exportedVars,
+      currentError: null,
+      currentJob: task,
+    };
+    fork.ownerObject = this.ownerObject;
+    fork.moduleObject = this.moduleObject;
+    fork.slicer = new TimeSlicer();
+    return fork;
   }
 
   /** Оценивает константное выражение (для препроцессора). */
@@ -85,10 +125,13 @@ export class Interpreter {
         throw new Error(`Тип '${typeName}' не найден`);
       },
     };
-    return new Interpreter(env).eval(expr, ctx.moduleScope, ctx);
+    const interpreter = new Interpreter(env);
+    const result = drive(interpreter.eval(expr, ctx.moduleScope, ctx));
+    if (isThenable(result)) throw new Error('Константное выражение не может быть асинхронным');
+    return result;
   }
 
-  run(program: Program): void {
+  run(program: Program): MaybePromise<void> {
     const ctx: Ctx = {
       methods: new Map(),
       moduleScope: new Scope(),
@@ -113,23 +156,36 @@ export class Interpreter {
     // Модуль «существует» уже во время исполнения своего тела: `ЭтотОбъект` и
     // события должны работать в том числе из инициализирующего кода.
     this.moduleCtx = ctx;
-    this.execGotoBlock(executable, ctx.moduleScope, ctx);
+    return drive(this.runGen(executable, ctx.moduleScope, ctx));
+  }
+
+  private *runGen(executable: Statement[], scope: Scope, ctx: Ctx): BslGenerator<void> {
+    yield* this.execGotoBlock(executable, scope, ctx);
   }
 
   /** Вызывает метод модуля по имени с готовыми значениями (для тестового раннера). */
-  invokeMethod(name: string, values: Value[]): Value {
+  invokeMethod(name: string, values: Value[]): MaybePromise<Value> {
+    return drive(this.invokeMethodGen(name, values));
+  }
+
+  private *invokeMethodGen(name: string, values: Value[]): BslGenerator<Value> {
     const ctx = this.moduleCtx;
     if (!ctx) throw new Error('Модуль ещё не выполнен');
     const method = ctx.methods.get(key(name));
     if (!method) throw new Error(`Метод '${name}' не найден`);
     const localScope = new Scope(ctx.moduleScope);
-    method.params.forEach((p, i) => {
-      const value =
-        i < values.length ? values[i] : p.defaultValue ? this.eval(p.defaultValue, ctx.moduleScope, ctx) : undefined;
-      localScope.set(p.name, value);
-    });
+    for (let i = 0; i < method.params.length; i++) {
+      const p = method.params[i]!;
+      if (i < values.length) {
+        localScope.set(p.name, values[i]);
+      } else if (p.defaultValue) {
+        localScope.set(p.name, yield* this.eval(p.defaultValue, ctx.moduleScope, ctx));
+      } else {
+        localScope.set(p.name, undefined);
+      }
+    }
     try {
-      this.execGotoBlock(method.body, localScope, ctx);
+      yield* this.execGotoBlock(method.body, localScope, ctx);
     } catch (e) {
       if (e instanceof ReturnSignal) return e.value;
       throw e;
@@ -141,12 +197,16 @@ export class Interpreter {
    * Исполняет код в области видимости модуля (обработчики событий, REPL и т.п.).
    * Дополнительные переменные (`vars`) видны коду и не меняют модуль.
    */
-  executeInModule(source: string, vars?: Record<string, Value>): void {
+  executeInModule(source: string, vars?: Record<string, Value>): MaybePromise<void> {
+    return drive(this.executeInModuleGen(source, vars));
+  }
+
+  private *executeInModuleGen(source: string, vars?: Record<string, Value>): BslGenerator<void> {
     const ctx = this.moduleCtx;
     if (!ctx) throw new Error('Модуль ещё не выполнен');
     const scope = new Scope(ctx.moduleScope);
     if (vars) for (const [name, value] of Object.entries(vars)) scope.set(name, value);
-    this.execDynamic(source, scope, ctx);
+    yield* this.execDynamic(source, scope, ctx);
   }
 
   /** Есть ли у модуля метод с таким именем. */
@@ -160,9 +220,9 @@ export class Interpreter {
   }
 
   /** Вызывает экспортный метод модуля; неэкспортный снаружи недоступен. */
-  callExportedMethod(name: string, values: Value[]): Value {
+  callExportedMethod(name: string, values: Value[], options?: DriveOptions): MaybePromise<Value> {
     if (!this.hasExportedMethod(name)) throw new Error(`Метод '${name}' не найден`);
-    return this.invokeMethod(name, values);
+    return drive(this.invokeMethodGen(name, values), options);
   }
 
   /** Объявлена ли переменная с таким именем как экспортная. */
@@ -207,31 +267,39 @@ export class Interpreter {
    * значения после вызова (поддержка out-параметров вроде
    * `ОбработкаПолученияПредставления(Представление, СтандартнаяОбработка)`).
    */
-  invokeMethodWithOutputs(name: string, values: Value[]): Value[] {
+  invokeMethodWithOutputs(name: string, values: Value[]): MaybePromise<Value[]> {
+    return drive(this.invokeMethodWithOutputsGen(name, values));
+  }
+
+  private *invokeMethodWithOutputsGen(name: string, values: Value[]): BslGenerator<Value[]> {
     const ctx = this.moduleCtx;
     if (!ctx) throw new Error('Модуль ещё не выполнен');
     const method = ctx.methods.get(key(name));
     if (!method) throw new Error(`Метод '${name}' не найден`);
-    const boxes: Value[] = method.params.map((p, i) =>
-      i < values.length ? values[i] : p.defaultValue ? this.eval(p.defaultValue, ctx.moduleScope, ctx) : undefined,
-    );
+    const boxes: Value[] = [];
+    for (let i = 0; i < method.params.length; i++) {
+      const p = method.params[i]!;
+      if (i < values.length) boxes.push(values[i]);
+      else if (p.defaultValue) boxes.push(yield* this.eval(p.defaultValue, ctx.moduleScope, ctx));
+      else boxes.push(undefined);
+    }
     const localScope = new Scope(ctx.moduleScope);
     method.params.forEach((p, i) => {
       localScope.bindRef(p.name, new Ref(() => boxes[i], (v) => { boxes[i] = v; }));
     });
     try {
-      this.execGotoBlock(method.body, localScope, ctx);
+      yield* this.execGotoBlock(method.body, localScope, ctx);
     } catch (e) {
       if (!(e instanceof ReturnSignal)) throw e;
     }
     return boxes;
   }
 
-  private execBlock(body: Statement[], scope: Scope, ctx: Ctx): void {
-    for (const stmt of body) this.exec(stmt, scope, ctx);
+  private *execBlock(body: Statement[], scope: Scope, ctx: Ctx): BslGenerator<void> {
+    for (const stmt of body) yield* this.exec(stmt, scope, ctx);
   }
 
-  private execGotoBlock(body: Statement[], scope: Scope, ctx: Ctx): void {
+  private *execGotoBlock(body: Statement[], scope: Scope, ctx: Ctx): BslGenerator<void> {
     const labels = new Map<string, number>();
     body.forEach((s, i) => {
       if (s.kind === 'LabelStatement') labels.set(key(s.name), i);
@@ -241,7 +309,7 @@ export class Interpreter {
     while (i < body.length) {
       const stmt = body[i]!;
       try {
-        this.exec(stmt, scope, ctx);
+        yield* this.exec(stmt, scope, ctx);
       } catch (e) {
         if (e instanceof GotoSignal) {
           const target = labels.get(e.label);
@@ -255,48 +323,57 @@ export class Interpreter {
     }
   }
 
-  private exec(stmt: Statement, scope: Scope, ctx: Ctx): void {
+  private *exec(stmt: Statement, scope: Scope, ctx: Ctx): BslGenerator<void> {
+    if (this.slicer?.due()) yield yieldToHost();
     switch (stmt.kind) {
-      case 'Assignment':
-        this.assign(stmt.target, this.eval(stmt.value, scope, ctx), scope, ctx);
+      case 'Assignment': {
+        const value = yield* this.eval(stmt.value, scope, ctx);
+        yield* this.assign(stmt.target, value, scope, ctx);
         break;
-      case 'IfStatement':
-        if (toBoolean(this.eval(stmt.condition, scope, ctx))) {
-          this.execBlock(stmt.thenBranch, scope, ctx);
+      }
+      case 'IfStatement': {
+        const condition = yield* this.eval(stmt.condition, scope, ctx);
+        if (toBoolean(condition)) {
+          yield* this.execBlock(stmt.thenBranch, scope, ctx);
         } else if (stmt.elseBranch) {
           if (Array.isArray(stmt.elseBranch)) {
-            this.execBlock(stmt.elseBranch, scope, ctx);
+            yield* this.execBlock(stmt.elseBranch, scope, ctx);
           } else {
-            this.exec(stmt.elseBranch, scope, ctx);
+            yield* this.exec(stmt.elseBranch, scope, ctx);
           }
         }
         break;
+      }
       case 'ExpressionStatement':
-        this.eval(stmt.expression, scope, ctx);
+        yield* this.eval(stmt.expression, scope, ctx);
         break;
-      case 'ReturnStatement':
-        throw new ReturnSignal(stmt.value ? this.eval(stmt.value, scope, ctx) : undefined);
+      case 'ReturnStatement': {
+        const value =
+          stmt.value === undefined ? undefined : (yield* this.eval(stmt.value, scope, ctx));
+        throw new ReturnSignal(value);
+      }
       case 'MethodDeclaration':
       case 'VariableDeclaration':
         break; // собираются в run()
       case 'ForLoop':
-        this.execForLoop(stmt, scope, ctx);
+        yield* this.execForLoop(stmt, scope, ctx);
         break;
       case 'WhileLoop':
-        this.execWhileLoop(stmt, scope, ctx);
+        yield* this.execWhileLoop(stmt, scope, ctx);
         break;
       case 'ForEachLoop':
-        this.execForEachLoop(stmt, scope, ctx);
+        yield* this.execForEachLoop(stmt, scope, ctx);
         break;
       case 'BreakStatement':
         throw new BreakSignal();
       case 'ContinueStatement':
         throw new ContinueSignal();
       case 'TryExceptStatement':
-        this.execTryExcept(stmt, scope, ctx);
+        yield* this.execTryExcept(stmt, scope, ctx);
         break;
       case 'RaiseStatement': {
-        const value = stmt.value === undefined ? undefined : this.eval(stmt.value, scope, ctx);
+        const value =
+          stmt.value === undefined ? undefined : (yield* this.eval(stmt.value, scope, ctx));
         // Без аргумента `ВызватьИсключение;` перевыбрасывает текущее исключение.
         const description =
           value === undefined
@@ -306,14 +383,16 @@ export class Interpreter {
               : toStringValue(value);
         throw new BslRuntimeError(description);
       }
-      case 'ExecuteStatement':
-        this.execDynamic(toStringValue(this.eval(stmt.value, scope, ctx)), scope, ctx);
+      case 'ExecuteStatement': {
+        const source = toStringValue(yield* this.eval(stmt.value, scope, ctx));
+        yield* this.execDynamic(source, scope, ctx);
         break;
+      }
       case 'AddHandlerStatement':
-        this.execAddHandler(stmt, scope, ctx);
+        yield* this.execAddHandler(stmt, scope, ctx);
         break;
       case 'RemoveHandlerStatement':
-        this.execRemoveHandler(stmt, scope, ctx);
+        yield* this.execRemoveHandler(stmt, scope, ctx);
         break;
       case 'LabelStatement':
         break; // маркер — no-op
@@ -323,15 +402,15 @@ export class Interpreter {
   }
 
   /** Подписка: `ДобавитьОбработчик <источник>.<событие>, <обработчик>`. */
-  private execAddHandler(stmt: AddHandlerStatement, scope: Scope, ctx: Ctx): void {
+  private *execAddHandler(stmt: AddHandlerStatement, scope: Scope, ctx: Ctx): BslGenerator<void> {
     const events = this.env.events;
     if (!events) throw new Error('Реестр событий недоступен в этом окружении');
-    const source = this.eval(stmt.eventSource, scope, ctx);
+    const source = yield* this.eval(stmt.eventSource, scope, ctx);
     if (!isBslObject(source)) {
       throw new Error(`Источник события должен быть объектом, а не ${typeName(source)}`);
     }
-    const eventName = toStringValue(this.eval(stmt.eventName, scope, ctx));
-    const method = toStringValue(this.eval(stmt.handlerMethod, scope, ctx));
+    const eventName = toStringValue(yield* this.eval(stmt.eventName, scope, ctx));
+    const method = toStringValue(yield* this.eval(stmt.handlerMethod, scope, ctx));
     if (stmt.handlerTarget === null) {
       // Локальная форма: метод текущего модуля, проверка экспорта не нужна.
       events.add(source, eventName, this.getThisObject(), method, true, (args) =>
@@ -339,7 +418,7 @@ export class Interpreter {
       );
       return;
     }
-    const target = this.eval(stmt.handlerTarget, scope, ctx);
+    const target = yield* this.eval(stmt.handlerTarget, scope, ctx);
     if (!isBslObject(target)) {
       throw new Error(`Обработчик должен быть объектом, а не ${typeName(target)}`);
     }
@@ -347,30 +426,33 @@ export class Interpreter {
   }
 
   /** Отписка: `УдалитьОбработчик <источник>.<событие>, <обработчик>`. */
-  private execRemoveHandler(stmt: RemoveHandlerStatement, scope: Scope, ctx: Ctx): void {
+  private *execRemoveHandler(stmt: RemoveHandlerStatement, scope: Scope, ctx: Ctx): BslGenerator<void> {
     const events = this.env.events;
     if (!events) throw new Error('Реестр событий недоступен в этом окружении');
-    const source = this.eval(stmt.eventSource, scope, ctx);
+    const source = yield* this.eval(stmt.eventSource, scope, ctx);
     if (!isBslObject(source)) {
       throw new Error(`Источник события должен быть объектом, а не ${typeName(source)}`);
     }
-    const eventName = toStringValue(this.eval(stmt.eventName, scope, ctx));
-    const method = toStringValue(this.eval(stmt.handlerMethod, scope, ctx));
+    const eventName = toStringValue(yield* this.eval(stmt.eventName, scope, ctx));
+    const method = toStringValue(yield* this.eval(stmt.handlerMethod, scope, ctx));
     const target =
-      stmt.handlerTarget === null ? this.getThisObject() : this.eval(stmt.handlerTarget, scope, ctx);
+      stmt.handlerTarget === null
+        ? this.getThisObject()
+        : (yield* this.eval(stmt.handlerTarget, scope, ctx));
     if (!isBslObject(target)) {
       throw new Error(`Обработчик должен быть объектом, а не ${typeName(target)}`);
     }
     events.remove(source, eventName, target, method);
   }
 
-  private execForLoop(stmt: ForLoop, scope: Scope, ctx: Ctx): void {    const from = toNumber(this.eval(stmt.from, scope, ctx));
-    const to = toNumber(this.eval(stmt.to, scope, ctx));
+  private *execForLoop(stmt: ForLoop, scope: Scope, ctx: Ctx): BslGenerator<void> {
+    const from = toNumber(yield* this.eval(stmt.from, scope, ctx));
+    const to = toNumber(yield* this.eval(stmt.to, scope, ctx));
     let completed = true;
     for (let i = from; i <= to; i++) {
       this.setVariable(stmt.variable, i, scope, ctx);
       try {
-        this.execBlock(stmt.body, scope, ctx);
+        yield* this.execBlock(stmt.body, scope, ctx);
       } catch (e) {
         if (e instanceof BreakSignal) {
           completed = false;
@@ -384,10 +466,10 @@ export class Interpreter {
     if (completed) this.setVariable(stmt.variable, to + 1, scope, ctx);
   }
 
-  private execWhileLoop(stmt: WhileLoop, scope: Scope, ctx: Ctx): void {
-    while (toBoolean(this.eval(stmt.condition, scope, ctx))) {
+  private *execWhileLoop(stmt: WhileLoop, scope: Scope, ctx: Ctx): BslGenerator<void> {
+    while (toBoolean(yield* this.eval(stmt.condition, scope, ctx))) {
       try {
-        this.execBlock(stmt.body, scope, ctx);
+        yield* this.execBlock(stmt.body, scope, ctx);
       } catch (e) {
         if (e instanceof BreakSignal) break;
         if (e instanceof ContinueSignal) continue;
@@ -396,15 +478,15 @@ export class Interpreter {
     }
   }
 
-  private execForEachLoop(stmt: ForEachLoop, scope: Scope, ctx: Ctx): void {
-    const collection = this.eval(stmt.collection, scope, ctx);
+  private *execForEachLoop(stmt: ForEachLoop, scope: Scope, ctx: Ctx): BslGenerator<void> {
+    const collection = yield* this.eval(stmt.collection, scope, ctx);
     if (!isBslObject(collection) || !collection.iterate) {
       throw new Error('Для Каждого: значение не является коллекцией');
     }
     for (const item of collection.iterate()) {
       this.setVariable(stmt.variable, item, scope, ctx);
       try {
-        this.execBlock(stmt.body, scope, ctx);
+        yield* this.execBlock(stmt.body, scope, ctx);
       } catch (e) {
         if (e instanceof BreakSignal) break;
         if (e instanceof ContinueSignal) continue;
@@ -413,9 +495,9 @@ export class Interpreter {
     }
   }
 
-  private execTryExcept(stmt: TryExceptStatement, scope: Scope, ctx: Ctx): void {
+  private *execTryExcept(stmt: TryExceptStatement, scope: Scope, ctx: Ctx): BslGenerator<void> {
     try {
-      this.execBlock(stmt.tryBody, scope, ctx);
+      yield* this.execBlock(stmt.tryBody, scope, ctx);
     } catch (e) {
       // BSL: Попытка/Исключение ловит любые ошибки рантайма, в т.ч. ошибки stdlib
       // (обычный Error), а не только ВызватьИсключение. Сигналы управления
@@ -424,7 +506,7 @@ export class Interpreter {
         const prev = ctx.currentError;
         ctx.currentError = e instanceof BslRuntimeError ? e.description : e.message;
         try {
-          this.execBlock(stmt.exceptBody, scope, ctx);
+          yield* this.execBlock(stmt.exceptBody, scope, ctx);
         } finally {
           ctx.currentError = prev;
         }
@@ -434,7 +516,7 @@ export class Interpreter {
     }
   }
 
-  private eval(expr: Expression, scope: Scope, ctx: Ctx): Value {
+  private *eval(expr: Expression, scope: Scope, ctx: Ctx): BslGenerator<Value> {
     switch (expr.kind) {
       case 'NumberLiteral':
       case 'StringLiteral':
@@ -458,35 +540,46 @@ export class Interpreter {
         return undefined;
       }
       case 'BinaryExpression':
-        return this.evalBinary(expr, scope, ctx);
+        return yield* this.evalBinary(expr, scope, ctx);
       case 'UnaryExpression':
-        return this.evalUnary(expr, scope, ctx);
+        return yield* this.evalUnary(expr, scope, ctx);
       case 'CallExpression':
-        return this.evalCall(expr, scope, ctx);
+        return yield* this.evalCall(expr, scope, ctx);
       case 'MemberExpression':
-        return this.evalMember(expr, scope, ctx);
+        return yield* this.evalMember(expr, scope, ctx);
       case 'IndexExpression':
-        return this.evalIndex(expr, scope, ctx);
-      case 'TernaryExpression':
-        return toBoolean(this.eval(expr.condition, scope, ctx))
-          ? this.eval(expr.then, scope, ctx)
-          : this.eval(expr.else, scope, ctx);
-      case 'NewObjectExpression':
-        return this.env.construct(expr.typeName, expr.args.map((a) => this.eval(a, scope, ctx)));
+        return yield* this.evalIndex(expr, scope, ctx);
+      case 'TernaryExpression': {
+        const condition = yield* this.eval(expr.condition, scope, ctx);
+        if (toBoolean(condition)) return yield* this.eval(expr.then, scope, ctx);
+        return yield* this.eval(expr.else, scope, ctx);
+      }
+      case 'NewObjectExpression': {
+        const args = yield* this.evalArgs(expr.args, scope, ctx);
+        return yield* yieldMaybe(this.env.construct(expr.typeName, args));
+      }
     }
   }
 
-  private evalBinary(expr: BinaryExpression, scope: Scope, ctx: Ctx): Value {
+  private *evalArgs(exprs: Expression[], scope: Scope, ctx: Ctx): BslGenerator<Value[]> {
+    const values: Value[] = [];
+    for (const expr of exprs) values.push(yield* this.eval(expr, scope, ctx));
+    return values;
+  }
+
+  private *evalBinary(expr: BinaryExpression, scope: Scope, ctx: Ctx): BslGenerator<Value> {
     // и/или — с коротким замыканием.
     if (expr.operator === 'и') {
-      return toBoolean(this.eval(expr.left, scope, ctx)) && toBoolean(this.eval(expr.right, scope, ctx));
+      const left = yield* this.eval(expr.left, scope, ctx);
+      return toBoolean(left) && toBoolean(yield* this.eval(expr.right, scope, ctx));
     }
     if (expr.operator === 'или') {
-      return toBoolean(this.eval(expr.left, scope, ctx)) || toBoolean(this.eval(expr.right, scope, ctx));
+      const left = yield* this.eval(expr.left, scope, ctx);
+      return toBoolean(left) || toBoolean(yield* this.eval(expr.right, scope, ctx));
     }
 
-    const left = this.eval(expr.left, scope, ctx);
-    const right = this.eval(expr.right, scope, ctx);
+    const left = yield* this.eval(expr.left, scope, ctx);
+    const right = yield* this.eval(expr.right, scope, ctx);
     switch (expr.operator) {
       case '+':
         return add(left, right);
@@ -518,8 +611,8 @@ export class Interpreter {
     }
   }
 
-  private evalUnary(expr: UnaryExpression, scope: Scope, ctx: Ctx): Value {
-    const operand = this.eval(expr.operand, scope, ctx);
+  private *evalUnary(expr: UnaryExpression, scope: Scope, ctx: Ctx): BslGenerator<Value> {
+    const operand = yield* this.eval(expr.operand, scope, ctx);
     switch (expr.operator) {
       case '+':
         return toNumber(operand);
@@ -532,13 +625,13 @@ export class Interpreter {
     }
   }
 
-  private evalCall(expr: CallExpression, scope: Scope, ctx: Ctx): Value {
+  private *evalCall(expr: CallExpression, scope: Scope, ctx: Ctx): BslGenerator<Value> {
     if (expr.callee.kind === 'Identifier') {
       const lower = key(expr.callee.name);
       // shortcut: Вычислить живёт здесь — нужен доступ к текущей области видимости.
       if (lower === 'вычислить' || lower === 'eval') {
-        const code = toStringValue(this.eval(expr.args[0]!, scope, ctx));
-        return this.evalDynamicExpression(code, scope, ctx);
+        const code = toStringValue(yield* this.eval(expr.args[0]!, scope, ctx));
+        return yield* this.evalDynamicExpression(code, scope, ctx);
       }
       // shortcut: ОписаниеОшибки/ИнформацияОбОшибке живут здесь — нужен доступ к текущему исключению.
       if (lower === 'описаниеошибки' || lower === 'errordescription') {
@@ -549,63 +642,71 @@ export class Interpreter {
       }
       // shortcut: ВызватьСобытие живёт здесь — событие объявляется на объекте текущего модуля.
       if (lower === 'вызватьсобытие' || lower === 'raiseevent') {
-        const name = toStringValue(this.eval(expr.args[0]!, scope, ctx));
-        const value = expr.args[1] === undefined ? undefined : this.eval(expr.args[1]!, scope, ctx);
+        const name = toStringValue(yield* this.eval(expr.args[0]!, scope, ctx));
+        const value = expr.args[1] === undefined ? undefined : yield* this.eval(expr.args[1]!, scope, ctx);
         const params = isBslObject(value) && value.iterate ? value.iterate() : [];
-        this.env.events?.raise(this.getThisObject(), name, params);
+        yield* yieldMaybe(this.env.events?.raise(this.getThisObject(), name, params));
         return undefined;
       }
       const method = ctx.methods.get(lower);
-      if (method) return this.callMethod(method, expr.args, scope, ctx);
-      return this.env.call(expr.callee.name, expr.args.map((a) => this.eval(a, scope, ctx)));
+      if (method) return yield* this.callMethod(method, expr.args, scope, ctx);
+      const args = yield* this.evalArgs(expr.args, scope, ctx);
+      return yield* yieldMaybe(this.env.call(expr.callee.name, args));
     }
 
     if (expr.callee.kind === 'MemberExpression') {
-      const obj = this.eval(expr.callee.object, scope, ctx);
+      const obj = yield* this.eval(expr.callee.object, scope, ctx);
       if (!isBslObject(obj)) {
         throw new Error(`Метод '${expr.callee.property}' недоступен для ${typeName(obj)}`);
       }
-      return obj.callMethod(expr.callee.property, expr.args.map((a) => this.eval(a, scope, ctx)));
+      const args = yield* this.evalArgs(expr.args, scope, ctx);
+      return yield* yieldMaybe(obj.callMethod(expr.callee.property, args));
     }
 
     throw new Error('Недопустимый вызов функции');
   }
 
-  private evalMember(expr: MemberExpression, scope: Scope, ctx: Ctx): Value {
-    const obj = this.eval(expr.object, scope, ctx);
+  private *evalMember(expr: MemberExpression, scope: Scope, ctx: Ctx): BslGenerator<Value> {
+    const obj = yield* this.eval(expr.object, scope, ctx);
     if (!isBslObject(obj)) {
       throw new Error(`Свойство '${expr.property}' недоступно для ${typeName(obj)}`);
     }
-    return obj.getProp(expr.property);
+    return yield* yieldMaybe(obj.getProp(expr.property));
   }
 
-  private evalIndex(expr: IndexExpression, scope: Scope, ctx: Ctx): Value {
-    const obj = this.eval(expr.object, scope, ctx);
-    const index = this.eval(expr.index, scope, ctx);
+  private *evalIndex(expr: IndexExpression, scope: Scope, ctx: Ctx): BslGenerator<Value> {
+    const obj = yield* this.eval(expr.object, scope, ctx);
+    const index = yield* this.eval(expr.index, scope, ctx);
     if (!isBslObject(obj)) {
       throw new Error(`Индексация недоступна для ${typeName(obj)}`);
     }
-    return obj.getIndex(index);
+    return yield* yieldMaybe(obj.getIndex(index));
   }
 
-  private callMethod(method: MethodDeclaration, argExprs: Expression[], scope: Scope, ctx: Ctx): Value {
+  private *callMethod(
+    method: MethodDeclaration,
+    argExprs: Expression[],
+    scope: Scope,
+    ctx: Ctx,
+  ): BslGenerator<Value> {
     const localScope = new Scope(ctx.moduleScope);
-    method.params.forEach((p, i) => {
+    for (let i = 0; i < method.params.length; i++) {
+      const p = method.params[i]!;
       const argExpr = argExprs[i];
       if (p.byValue || argExpr === undefined) {
-        const value =
-          argExpr !== undefined
-            ? this.eval(argExpr, scope, ctx)
-            : p.defaultValue
-              ? this.eval(p.defaultValue, ctx.moduleScope, ctx)
-              : undefined;
-        localScope.set(p.name, value);
+        if (argExpr !== undefined) {
+          localScope.set(p.name, yield* this.eval(argExpr, scope, ctx));
+        } else if (p.defaultValue) {
+          localScope.set(p.name, yield* this.eval(p.defaultValue, ctx.moduleScope, ctx));
+        } else {
+          localScope.set(p.name, undefined);
+        }
       } else {
-        localScope.bindRef(p.name, this.resolveRef(argExpr, scope, ctx));
+        localScope.bindRef(p.name, yield* this.resolveRef(argExpr, scope, ctx));
       }
-    });
+    }
     try {
-      this.execGotoBlock(method.body, localScope, ctx);
+      yield* this.execGotoBlock(method.body, localScope, ctx);
     } catch (e) {
       if (e instanceof ReturnSignal) return e.value;
       throw e;
@@ -614,7 +715,7 @@ export class Interpreter {
   }
 
   /** Разрешает выражение-аргумент в ссылку (по ссылке); для не-lvalue — временная ячейка. */
-  private resolveRef(expr: Expression, scope: Scope, ctx: Ctx): Ref {
+  private *resolveRef(expr: Expression, scope: Scope, ctx: Ctx): BslGenerator<Ref> {
     if (expr.kind === 'Identifier') {
       const name = expr.name;
       return new Ref(
@@ -623,24 +724,24 @@ export class Interpreter {
       );
     }
     if (expr.kind === 'IndexExpression') {
-      const obj = this.eval(expr.object, scope, ctx);
-      const index = this.eval(expr.index, scope, ctx);
+      const obj = yield* this.eval(expr.object, scope, ctx);
+      const index = yield* this.eval(expr.index, scope, ctx);
       if (!isBslObject(obj)) throw new Error(`Индексация недоступна для ${typeName(obj)}`);
       return new Ref(
-        () => obj.getIndex(index),
+        () => obj.getIndex(index) as Value,
         (v) => obj.setIndex(index, v),
       );
     }
     if (expr.kind === 'MemberExpression') {
-      const obj = this.eval(expr.object, scope, ctx);
+      const obj = yield* this.eval(expr.object, scope, ctx);
       if (!isBslObject(obj)) throw new Error(`Свойство '${expr.property}' недоступно для ${typeName(obj)}`);
       return new Ref(
-        () => obj.getProp(expr.property),
+        () => obj.getProp(expr.property) as Value,
         (v) => obj.setProp(expr.property, v),
       );
     }
     // выражение (не переменная): изменения отбрасываются после вызова
-    let temp = this.eval(expr, scope, ctx);
+    let temp = yield* this.eval(expr, scope, ctx);
     return new Ref(
       () => temp,
       (v) => {
@@ -658,16 +759,16 @@ export class Interpreter {
   }
 
   /** `Вычислить(строка)` — вычисляет выражение в текущей области видимости. */
-  private evalDynamicExpression(code: string, scope: Scope, ctx: Ctx): Value {
+  private *evalDynamicExpression(code: string, scope: Scope, ctx: Ctx): BslGenerator<Value> {
     // оборачиваем в вызов, чтобы разобрать именно выражение (как препроцессор)
     const program = Interpreter.compileDynamic(`сообщить(${code});`);
     const stmt = program.body[0] as ExpressionStatement;
     const call = stmt.expression as CallExpression;
-    return this.eval(call.args[0]!, scope, ctx);
+    return yield* this.eval(call.args[0]!, scope, ctx);
   }
 
   /** `Выполнить строка` — исполняет операторы в текущей области видимости. */
-  private execDynamic(source: string, scope: Scope, ctx: Ctx): void {
+  private *execDynamic(source: string, scope: Scope, ctx: Ctx): BslGenerator<void> {
     let program: Program;
     try {
       program = Interpreter.compileDynamic(source);
@@ -681,7 +782,7 @@ export class Interpreter {
       else executable.push(stmt);
     }
     try {
-      this.execGotoBlock(executable, scope, ctx);
+      yield* this.execGotoBlock(executable, scope, ctx);
     } catch (e) {
       if (e instanceof ReturnSignal) {
         throw new BslRuntimeError('Оператор "Возврат" может использоваться только внутри метода');
@@ -700,18 +801,18 @@ export class Interpreter {
     else scope.set(name, value);
   }
 
-  private assign(target: LValue, value: Value, scope: Scope, ctx: Ctx): void {
+  private *assign(target: LValue, value: Value, scope: Scope, ctx: Ctx): BslGenerator<void> {
     if (target.kind === 'Identifier') {
       this.setVariable(target.name, value, scope, ctx);
     } else if (target.kind === 'IndexExpression') {
-      const obj = this.eval(target.object, scope, ctx);
-      const index = this.eval(target.index, scope, ctx);
+      const obj = yield* this.eval(target.object, scope, ctx);
+      const index = yield* this.eval(target.index, scope, ctx);
       if (!isBslObject(obj)) throw new Error(`Индексация недоступна для ${typeName(obj)}`);
-      obj.setIndex(index, value);
+      yield* yieldMaybe(obj.setIndex(index, value));
     } else {
-      const obj = this.eval(target.object, scope, ctx);
+      const obj = yield* this.eval(target.object, scope, ctx);
       if (!isBslObject(obj)) throw new Error(`Свойство '${target.property}' недоступно для ${typeName(obj)}`);
-      obj.setProp(target.property, value);
+      yield* yieldMaybe(obj.setProp(target.property, value));
     }
   }
 }

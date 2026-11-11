@@ -2,7 +2,8 @@ import { GlobalContext } from '../runtime/context';
 import { BslEnumValue } from '../runtime/enum';
 import { BslType } from '../runtime/type';
 import { BslErrorInfo } from '../runtime/error-info';
-import { toStringValue } from '../runtime/values';
+import { toNumber, toStringValue } from '../runtime/values';
+import { sleep } from '../runtime/async';
 import type { Value } from '../runtime/values';
 import { BslArray } from './collections/array';
 import { BslMap } from './collections/map';
@@ -24,6 +25,7 @@ import { registerSystemFunctions } from './system';
 import { registerRegexFunctions } from './regex';
 import { registerRandomFunctions } from './random';
 import { registerScriptFunctions } from './script';
+import { registerTasks } from './tasks';
 import { registerHttpFunctions } from './http';
 import type { HttpTransport } from './http';
 
@@ -37,6 +39,10 @@ export function createGlobalContext(httpTransport?: HttpTransport): GlobalContex
     const name = typeArg instanceof BslType ? typeArg.name : toStringValue(typeArg);
     return ctx.construct(name, args.slice(1));
   });
+  // Кооперативная пауза: только текущий логический поток, хост/страница продолжают работу.
+  ctx.registerAlias('Приостановить', 'Sleep', (args) =>
+    sleep(toNumber(args[0] ?? 0)).then(() => undefined),
+  );
 
   const errDescription = (args: Value[]): string => {
     const e = args[0];
@@ -80,6 +86,7 @@ export function createGlobalContext(httpTransport?: HttpTransport): GlobalContex
   registerRandomFunctions(ctx);
   registerScriptFunctions(ctx);
   registerHttpFunctions(ctx, httpTransport);
+  registerTasks(ctx);
 
   // Библиотека asserts (`#Использовать asserts`): Ожидаем.Что(факт).Равно(…).
   ctx.registerGlobal('Ожидаем', new BslExpect());

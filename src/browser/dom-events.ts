@@ -53,7 +53,11 @@ function makeHandler(element: Element, code: string): (event: Event) => void {
       return;
     }
     try {
-      interpreter.executeInModule(code, { 'Событие': new BslDomEvent(event, ctx) });
+      const result = interpreter.executeInModule(code, { 'Событие': new BslDomEvent(event, ctx) });
+      // DOM-событие нельзя дождаться: ошибки async-части логируем, страницу не роняем.
+      void Promise.resolve(result).catch((e: unknown) => {
+        console.error(`Ошибка в обработчике '${ATTRIBUTE_PREFIX}${event.type}':`, e instanceof Error ? e.message : e);
+      });
     } catch (e) {
       console.error(`Ошибка в обработчике '${ATTRIBUTE_PREFIX}${event.type}':`, e instanceof Error ? e.message : e);
     }

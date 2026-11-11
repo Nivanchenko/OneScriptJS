@@ -28,7 +28,7 @@ async function main(): Promise<void> {
     const entryPath = resolve(arg);
     const source = readFileSync(entryPath, 'utf8');
     const modules = collectModuleSources(entryPath, source);
-    run(source, createNodeGlobalContext(), {
+    await run(source, createNodeGlobalContext(), {
       path: arg,
       basePath: entryPath,
       modules,
@@ -38,7 +38,7 @@ async function main(): Promise<void> {
   }
 
   const source = await readStdin();
-  run(source, createNodeGlobalContext());
+  await run(source, createNodeGlobalContext());
 }
 
 function readStdin(): Promise<string> {

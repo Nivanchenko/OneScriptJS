@@ -4,6 +4,8 @@ import { preprocessScript } from '../parser/preprocessor';
 import { Interpreter } from './interpreter';
 import type { ModuleHost, ModuleRegistry, RuntimeEnvironment } from './context';
 import { defaultResolve, ModuleLoader } from './modules';
+import type { MaybePromise } from './async';
+import { thenMaybe } from './async';
 
 export interface RunOptions {
   /** Путь к исполняемому файлу сценария (для `ТекущийСценарий`). */
@@ -27,7 +29,7 @@ interface ScriptState {
 }
 
 /** Лексер → препроцессор → парсер → интерпретатор: выполняет исходник BSL. */
-export function run(source: string, env: RuntimeEnvironment, options?: RunOptions): void {
+export function run(source: string, env: RuntimeEnvironment, options?: RunOptions): MaybePromise<void> {
   const state = env as ScriptState;
   if (options?.path !== undefined) {
     state.scriptPath = options.path;
@@ -55,12 +57,15 @@ export function run(source: string, env: RuntimeEnvironment, options?: RunOption
     : undefined;
   state.modules = loader;
 
+  const runBody = (): MaybePromise<void> => {
+    const interpreter = new Interpreter(env);
+    state.currentInterpreter = interpreter;
+    return thenMaybe(interpreter.run(parse(tokens)), () => env.flushAsync?.());
+  };
+
   if (imports.length > 0) {
     if (!loader) throw new Error('Импорт файлов не поддерживается текущим контекстом исполнения');
-    loader.importAll(imports, options?.basePath ?? options?.path ?? '');
+    return thenMaybe(loader.importAll(imports, options?.basePath ?? options?.path ?? ''), runBody);
   }
-
-  const interpreter = new Interpreter(env);
-  state.currentInterpreter = interpreter;
-  interpreter.run(parse(tokens));
+  return runBody();
 }

@@ -6,6 +6,8 @@ import type { GlobalContext } from '../runtime/context';
 import type { BslObject } from '../runtime/object';
 import type { Value } from '../runtime/values';
 import { toStringValue } from '../runtime/values';
+import type { MaybePromise } from '../runtime/async';
+import { finallyMaybe, isThenable, thenMaybe } from '../runtime/async';
 
 function dirName(path: string): string {
   const i = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
@@ -27,7 +29,7 @@ export class BslScript implements BslObject {
   ) {}
 
   /** Пока метод исполняется, `ТекущийСценарий()` указывает на этот сценарий. */
-  private withCurrent<T>(action: () => T): T {
+  private withCurrent<T>(action: () => MaybePromise<T>): MaybePromise<T> {
     const state = this.interpreter.env as {
       currentInterpreter?: Interpreter;
       scriptPath?: string;
@@ -36,15 +38,19 @@ export class BslScript implements BslObject {
     const previousPath = state.scriptPath;
     state.currentInterpreter = this.interpreter;
     state.scriptPath = this.path;
-    try {
-      return action();
-    } finally {
+    const restore = (): void => {
       state.currentInterpreter = previousInterpreter;
       state.scriptPath = previousPath;
+    };
+    try {
+      return finallyMaybe(action(), restore);
+    } catch (e) {
+      restore();
+      throw e;
     }
   }
 
-  callMethod(name: string, args: Value[]): Value {
+  callMethod(name: string, args: Value[]): MaybePromise<Value> {
     if (!this.interpreter.hasExportedMethod(name)) {
       throw new Error(`Метод '${name}' не найден у типа Сценарий`);
     }
@@ -95,6 +101,10 @@ export class BslScript implements BslObject {
       const out = this.withCurrent(() =>
         this.interpreter.invokeMethodWithOutputs('ОбработкаПолученияПредставления', ['', true]),
       );
+      // shortcut: представление синхронно; приостанавливающийся обработчик не поддержан.
+      if (isThenable(out)) {
+        throw new Error('Строка(Сценарий): обработчик представления не может приостанавливаться');
+      }
       if (out[1] === false) return toStringValue(out[0] ?? '');
     }
     return 'Сценарий';
@@ -110,29 +120,35 @@ export function loadScriptFromSource(
   env: GlobalContext,
   source: string,
   path?: string,
-): BslScript {
+): MaybePromise<BslScript> {
   const { tokens, imports } = preprocessScript(tokenize(source));
+  const runBody = (): MaybePromise<BslScript> => {
+    const interpreter = new Interpreter(env);
+    // `ЭтотОбъект`/`ВызватьСобытие` внутри сценария относятся к объекту этого сценария.
+    const scriptObject = new BslScript(interpreter, path);
+    interpreter.ownerObject = scriptObject;
+    // Во время тела сценария `ТекущийСценарий()` уже указывает на него.
+    const previousInterpreter = env.currentInterpreter;
+    const previousPath = env.scriptPath;
+    env.currentInterpreter = interpreter;
+    env.scriptPath = path;
+    const restore = (): void => {
+      env.currentInterpreter = previousInterpreter;
+      env.scriptPath = previousPath;
+    };
+    try {
+      return thenMaybe(finallyMaybe(interpreter.run(parse(tokens)), restore), () => scriptObject);
+    } catch (e) {
+      restore();
+      throw e;
+    }
+  };
   if (imports.length > 0) {
     const host = env.modules;
     if (!host) throw new Error('Импорт файлов не поддерживается текущим контекстом исполнения');
-    host.importAll(imports, path ?? env.basePath ?? env.scriptPath ?? '');
+    return thenMaybe(host.importAll(imports, path ?? env.basePath ?? env.scriptPath ?? ''), runBody);
   }
-  const interpreter = new Interpreter(env);
-  // `ЭтотОбъект`/`ВызватьСобытие` внутри сценария относятся к объекту этого сценария.
-  const scriptObject = new BslScript(interpreter, path);
-  interpreter.ownerObject = scriptObject;
-  // Во время тела сценария `ТекущийСценарий()` уже указывает на него.
-  const previousInterpreter = env.currentInterpreter;
-  const previousPath = env.scriptPath;
-  env.currentInterpreter = interpreter;
-  env.scriptPath = path;
-  try {
-    interpreter.run(parse(tokens));
-  } finally {
-    env.currentInterpreter = previousInterpreter;
-    env.scriptPath = previousPath;
-  }
-  return scriptObject;
+  return runBody();
 }
 
 /** Регистрирует `ЗагрузитьСценарийИзСтроки`, `ТекущийСценарий`, `СтартовыйСценарий`. */

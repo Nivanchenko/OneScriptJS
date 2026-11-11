@@ -1,23 +1,26 @@
 import type { Value } from './values';
+import type { MaybePromise } from './async';
 import type { BslObject } from './object';
 import type { Interpreter } from './interpreter';
 import { EventProcessor } from './events';
 import type { ImportDirective } from '../parser/preprocessor';
 
-/** Глобальная функция BSL: принимает значения аргументов, возвращает значение. */
-export type GlobalFunction = (args: Value[]) => Value;
+/** Глобальная функция BSL: принимает значения аргументов, возвращает значение или Promise. */
+export type GlobalFunction = (args: Value[]) => MaybePromise<Value>;
 
-/** Конструктор типа BSL (для `Новый <Тип>`). */
-export type TypeConstructor = (args: Value[]) => BslObject;
+/** Конструктор типа BSL (для `Новый <Тип>`): может вернуть Promise (async-инициализация). */
+export type TypeConstructor = (args: Value[]) => MaybePromise<BslObject>;
 
 /** Контракт, по которому интерпретатор вызывает глобальные функции, создаёт объекты и резолвит глобальные значения. */
 export interface RuntimeEnvironment {
-  call(name: string, args: Value[]): Value;
-  construct(typeName: string, args: Value[]): Value;
+  call(name: string, args: Value[]): MaybePromise<Value>;
+  construct(typeName: string, args: Value[]): MaybePromise<Value>;
   /** Резолвит глобальное значение (перечисление и т.п.); undefined, если нет. */
   resolveGlobal?(name: string): Value | undefined;
   /** Реестр подписок на события (у стандартного контекста есть всегда). */
   events?: EventProcessor;
+  /** Дождаться активных фоновых заданий перед завершением запуска. */
+  flushAsync?(): MaybePromise<void>;
 }
 
 /** Реестр, достаточный загрузчику модулей: глобальные имена и типы. */
@@ -53,6 +56,8 @@ export class GlobalContext implements RuntimeEnvironment {
   modules?: ModuleHost;
   /** Платформенное ленивое чтение исходника: Node ставит `fs`, браузер — нет. */
   loadSource?: (path: string) => string;
+  /** Хук: дождаться активных фоновых заданий (ставит стандартная библиотека). */
+  flushAsync?: () => MaybePromise<void>;
 
   register(name: string, fn: GlobalFunction): void {
     this.functions.set(name.toLowerCase(), fn);
@@ -80,13 +85,13 @@ export class GlobalContext implements RuntimeEnvironment {
     return this.types.has(name.toLowerCase());
   }
 
-  call(name: string, args: Value[]): Value {
+  call(name: string, args: Value[]): MaybePromise<Value> {
     const fn = this.functions.get(name.toLowerCase());
     if (!fn) throw new Error(`Неизвестная функция: ${name}`);
     return fn(args);
   }
 
-  construct(typeName: string, args: Value[]): Value {
+  construct(typeName: string, args: Value[]): MaybePromise<Value> {
     const ctor = this.types.get(typeName.toLowerCase());
     if (!ctor) throw new Error(`Тип '${typeName}' не найден`);
     return ctor(args);

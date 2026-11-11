@@ -1,6 +1,7 @@
 import type { BslObject } from './object';
 import type { Interpreter } from './interpreter';
 import type { Value } from './values';
+import type { MaybePromise } from './async';
 
 /** Имя файла без пути и расширения: `lib/НекийСкрипт.os` → `НекийСкрипт`. */
 export function nameFromPath(path: string): string {
@@ -44,7 +45,7 @@ export class BslModule implements BslObject {
     return this.interpreter;
   }
 
-  callMethod(name: string, args: Value[]): Value {
+  callMethod(name: string, args: Value[]): MaybePromise<Value> {
     const interpreter = this.requireInterpreter();
     if (!interpreter.hasExportedMethod(name)) {
       throw new Error(`Метод '${name}' не найден у типа ${this.name}`);
@@ -88,7 +89,7 @@ export class BslInstance implements BslObject {
     private readonly interpreter: Interpreter,
   ) {}
 
-  callMethod(name: string, args: Value[]): Value {
+  callMethod(name: string, args: Value[]): MaybePromise<Value> {
     if (!this.interpreter.hasExportedMethod(name)) {
       throw new Error(`Метод '${name}' не найден у типа ${this.typeName}`);
     }
