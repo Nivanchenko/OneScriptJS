@@ -355,4 +355,19 @@ describe('парсер', () => {
       handlerMethod: { kind: 'StringLiteral', value: 'Метод' },
     });
   });
+
+  it('парсит УдалитьОбработчик', () => {
+    expect(parseExpr('УдалитьОбработчик Источник.МоеСобытие, ЭтотОбъект.Метод')).toMatchObject({
+      kind: 'RemoveHandlerStatement',
+      eventSource: { kind: 'Identifier', name: 'Источник' },
+      eventName: { kind: 'StringLiteral', value: 'МоеСобытие' },
+      handlerTarget: { kind: 'Identifier', name: 'ЭтотОбъект' },
+      handlerMethod: { kind: 'StringLiteral', value: 'Метод' },
+    });
+    expect(parseExpr('УдалитьОбработчик Источник.МоеСобытие, Обработчик')).toMatchObject({
+      kind: 'RemoveHandlerStatement',
+      handlerTarget: null,
+      handlerMethod: { kind: 'StringLiteral', value: 'Обработчик' },
+    });
+  });
 });

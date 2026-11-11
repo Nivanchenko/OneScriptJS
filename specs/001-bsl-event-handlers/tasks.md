@@ -99,7 +99,7 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 ### Implementation for User Story 2
 
 - [x] T015 [P] [US2] Добавить `remove` в `src/runtime/events.ts` (отсутствующая подписка — no-op; удаление не меняет порядок остальных); дедупликация и `raise` уже реализованы в T005
-- [ ] T016 [P] [US2] Парсер: `KW_REMOVE_HANDLER = {удалитьобработчик, removehandler}` и `parseHandler('remove')` в `src/parser/parser.ts` → `RemoveHandlerStatement`; тесты разбора — в `tests/parser.test.ts`
+- [x] T016 [P] [US2] Парсер: `KW_REMOVE_HANDLER = {удалитьобработчик, removehandler}` и `parseHandler('remove')` в `src/parser/parser.ts` → `RemoveHandlerStatement`; тесты разбора — в `tests/parser.test.ts`
 - [ ] T017 [P] [US2] Интерпретатор: `case 'RemoveHandlerStatement'` в `exec` (`src/runtime/interpreter.ts`) → `env.events.remove(...)`
 - [ ] T018 [US2] Сделать T014 зелёными; регрессия `pnpm typecheck && pnpm test`
 

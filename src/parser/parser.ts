@@ -36,6 +36,7 @@ const KW_NEW = new Set(['новый', 'new']);
 const KW_GOTO = new Set(['перейти', 'goto']);
 const KW_EXECUTE = new Set(['выполнить', 'execute']);
 const KW_ADD_HANDLER = new Set(['добавитьобработчик']);
+const KW_REMOVE_HANDLER = new Set(['удалитьобработчик']);
 
 // Ключевые слова конца блока: завершают оператор без ';'.
 const END_OF_BLOCK = new Set([
@@ -142,6 +143,7 @@ class Parser {
     if (this.isKeyword(KW_GOTO)) return this.parseGoto();
     if (this.isKeyword(KW_EXECUTE)) return this.parseExecute();
     if (this.isKeyword(KW_ADD_HANDLER)) return this.parseHandler('add');
+    if (this.isKeyword(KW_REMOVE_HANDLER)) return this.parseHandler('remove');
     if (this.checkOp('~')) return this.parseLabel();
 
     const save = this.current;
