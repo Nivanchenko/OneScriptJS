@@ -139,7 +139,14 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
   `docs/plan.md` удалён (устаревший план вынесен в `specs/`), отметка T44 не требуется;
   `docs/status.md` обновлён: спека 001 в «реализовано», 435 тестов / 56 файлов, `events.os`
   теперь падает на `ПодключитьСценарий` (спека 004), а не на разборе.
-- [ ] T027 Финальная проверка по `quickstart.md` и `plan.md` → Verification: `pnpm typecheck && pnpm test`, `pnpm build`, `node scripts/run-reference-tests.mjs` (не хуже 18/66); зафиксировать вывод
+- [x] T027 Финальная проверка по `quickstart.md` и `plan.md` → Verification: `pnpm typecheck && pnpm test`, `pnpm build`, `node scripts/run-reference-tests.mjs` (не хуже 18/66); зафиксировать вывод
+
+**Verification (T027, факт)**: `pnpm typecheck` ✓; `pnpm test` — 56 файлов / 435 тестов ✓;
+`pnpm build` ✓ (браузер, Node-библиотека, CLI, `.d.ts`); `node scripts/run-reference-tests.mjs`
+— 18/66 (регрессий нет), `events.os` теперь разбирается и падает на `ПодключитьСценарий`
+(спека 004), а не на разборе; ручной сценарий из `quickstart.md` через CLI — вывод `1`.
+Пример в `quickstart.md` исправлен: BSL-строки в двойных кавычках с продолжением `|` и
+канонический порядок секций модуля (переменные → методы → код).
 
 ---
 
