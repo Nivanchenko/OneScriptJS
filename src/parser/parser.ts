@@ -119,9 +119,15 @@ class Parser {
     while (this.matchEndOfStatement()) { /* пустой оператор `;;` */ }
 
     if (this.isKeyword(KW_IF)) return this.parseIf();
-    if (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) return this.parseMethod();
+    if (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) {
+      this.error('объявление метода должно быть расположено до исполняемого кода');
+    }
     if (this.isKeyword(KW_RETURN)) return this.parseReturn();
-    if (this.isKeyword(KW_VAR)) return this.parseVariableDeclaration();
+    if (this.isKeyword(KW_VAR)) {
+      this.error(
+        'объявления переменных должны быть расположены в начале модуля, процедуры или функции',
+      );
+    }
     if (this.isKeyword(KW_FOR)) return this.parseFor();
     if (this.isKeyword(KW_WHILE)) return this.parseWhile();
     if (this.isKeyword(KW_BREAK)) return this.parseBreak();
@@ -194,8 +200,15 @@ class Parser {
     this.expectOp(')');
     const exported = this.matchKeyword(KW_EXPORT);
     const endKw = isFunction ? KW_ENDFUNCTION : KW_ENDPROCEDURE;
+
     const body: Statement[] = [];
+    this.skipModuleSeparators();
+    while (this.isKeyword(KW_VAR)) {
+      body.push(this.parseVariableDeclaration());
+      this.skipModuleSeparators();
+    }
     while (!this.isEnd() && !this.isKeyword(endKw)) body.push(this.parseStatement());
+
     this.expectKeyword(endKw);
     this.matchEndOfStatement();
     return {
