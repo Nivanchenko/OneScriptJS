@@ -129,8 +129,8 @@ Dev-сервер отдаёт собранный `dist/onescript.js` по пут
 pnpm demo   # сборка + копирование примеров в dist/ + http://localhost:4173
 ```
 
-Открывается `/counter.html`; остальные страницы — по тем же именам:
-`/input.html`, `/hover.html`, `/dom.html`, `/hello.html`.
+Открывается `index.html` со ссылками на все примеры: `hello.html`,
+`counter.html`, `input.html`, `hover.html`, `dom.html`, `todo.html`.
 
 ## Разработка
 
@@ -142,7 +142,7 @@ pnpm build          # полная сборка
 ```
 
 См. также [`AGENTS.md`](AGENTS.md), [`docs/architecture.md`](docs/architecture.md),
-[`docs/plan.md`](docs/plan.md), [`docs/bsl-surface.md`](docs/bsl-surface.md).
+[`specs/`](specs/) (спецификации незавершённых работ), [`docs/bsl-surface.md`](docs/bsl-surface.md).
 
 ## Лицензия
 
