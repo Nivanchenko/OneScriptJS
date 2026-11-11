@@ -1,0 +1,15 @@
+{
+  "version": "1.4.0",
+  "integration_state_schema": 1,
+  "installed_integrations": [
+    "dsh"
+  ],
+  "integration_settings": {
+    "dsh": {
+      "script": "sh",
+      "invoke_separator": "-"
+    }
+  },
+  "integration": "dsh",
+  "default_integration": "dsh"
+}
