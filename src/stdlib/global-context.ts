@@ -24,9 +24,11 @@ import { registerSystemFunctions } from './system';
 import { registerRegexFunctions } from './regex';
 import { registerRandomFunctions } from './random';
 import { registerScriptFunctions } from './script';
+import { registerHttpFunctions } from './http';
+import type { HttpTransport } from './http';
 
 /** Создаёт стандартный глобальный контекст (`Сообщить`, типы и пр.). */
-export function createGlobalContext(): GlobalContext {
+export function createGlobalContext(httpTransport?: HttpTransport): GlobalContext {
   const ctx = new GlobalContext();
   ctx.registerAlias('Сообщить', 'Message', message);
   // Динамический конструктор: `Новый("Массив", …)` / `Новый(ИмяТипа, …)`.
@@ -77,6 +79,7 @@ export function createGlobalContext(): GlobalContext {
   registerRegexFunctions(ctx);
   registerRandomFunctions(ctx);
   registerScriptFunctions(ctx);
+  registerHttpFunctions(ctx, httpTransport);
 
   // Библиотека asserts (`#Использовать asserts`): Ожидаем.Что(факт).Равно(…).
   ctx.registerGlobal('Ожидаем', new BslExpect());
