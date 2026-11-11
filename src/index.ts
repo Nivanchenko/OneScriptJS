@@ -15,6 +15,7 @@ export { runTests } from './testing/runner';
 export type { TestResult } from './testing/runner';
 export { BslTestContext } from './testing/test-context';
 export type { RuntimeEnvironment, GlobalFunction, TypeConstructor } from './runtime/context';
+export type { HttpTransport } from './stdlib/http';
 export type { Value } from './runtime/values';
 export type { BslObject } from './runtime/object';
 

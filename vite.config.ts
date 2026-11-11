@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import type { Plugin } from 'vite';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 
 const BUNDLE = fileURLToPath(new URL('./dist/onescript.js', import.meta.url));
 
@@ -33,10 +34,71 @@ function serveBuiltBundle(): Plugin {
   };
 }
 
+/**
+ * Мок-бэкенд для `examples/http.html`: GET /api/demo и POST /api/echo.
+ * Работает и в `pnpm dev`, и в `pnpm demo` (vite preview); на сборку не влияет.
+ * Пример можно перенаправить на реальный сервер.
+ */
+function demoHttpApi(): Plugin {
+  const middleware = (req: IncomingMessage, res: ServerResponse, next: () => void): void => {
+    const url = (req.url ?? '').split('?')[0];
+    if (url === '/api/demo' && req.method === 'GET') {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(
+        JSON.stringify(
+          {
+            message: 'Привет с бэкенда!',
+            method: req.method,
+            time: new Date().toISOString(),
+            items: [
+              { id: 1, name: 'Первый' },
+              { id: 2, name: 'Второй' },
+            ],
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+    if (url === '/api/echo' && req.method === 'POST') {
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk: string) => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(
+          JSON.stringify(
+            { method: req.method, contentType: req.headers['content-type'] ?? '', body },
+            null,
+            2,
+          ),
+        );
+      });
+      return;
+    }
+    next();
+  };
+
+  return {
+    name: 'demo-http-api',
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+  };
+}
+
 // Браузерная сборка: единый скрипт onescript.js, подключаемый как
 // <script src="/onescript.js"></script> и регистрирующий <one-script>.
 export default defineConfig({
-  plugins: [serveBuiltBundle()],
+  plugins: [serveBuiltBundle(), demoHttpApi()],
   build: {
     lib: {
       entry: fileURLToPath(new URL('./src/browser/onescript.ts', import.meta.url)),

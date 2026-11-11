@@ -529,3 +529,6 @@ export function registerBinaryFunctions(ctx: GlobalContext): void {
     return arr;
   });
 }
+
+// Хелперы кодирования для других модулей stdlib (HTTP): те же правила BOM и кодировок.
+export { encode as encodeText, decode as decodeText, bytesToBase64 as toBase64 };
