@@ -374,6 +374,9 @@ class Parser {
     if (eventRef.kind === 'MemberExpression') {
       eventSource = eventRef.object;
       eventName = { kind: 'StringLiteral', pos: eventRef.pos, value: eventRef.property };
+    } else if (eventRef.kind === 'IndexExpression') {
+      eventSource = eventRef.object;
+      eventName = eventRef.index;
     } else {
       this.error('Ожидается имя события');
     }
@@ -388,6 +391,9 @@ class Parser {
     } else if (handlerRef.kind === 'MemberExpression') {
       handlerTarget = handlerRef.object;
       handlerMethod = { kind: 'StringLiteral', pos: handlerRef.pos, value: handlerRef.property };
+    } else if (handlerRef.kind === 'IndexExpression') {
+      handlerTarget = handlerRef.object;
+      handlerMethod = handlerRef.index;
     } else {
       this.error('Ожидается имя обработчика события');
     }

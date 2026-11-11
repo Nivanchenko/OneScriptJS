@@ -121,7 +121,7 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Парсер (`src/parser/parser.ts`): поддержка `IndexExpression` для источника и обработчика; проверка формы с сообщениями и позицией из `contracts/event-handler-contract.md` §2 («Ожидается имя события» / «Ожидается имя обработчика события»); тесты разбора — в `tests/parser.test.ts`
+- [x] T020 [US3] Парсер (`src/parser/parser.ts`): поддержка `IndexExpression` для источника и обработчика; проверка формы с сообщениями и позицией из `contracts/event-handler-contract.md` §2 («Ожидается имя события» / «Ожидается имя обработчика события»); тесты разбора — в `tests/parser.test.ts`
 - [ ] T021 [US3] Включить экспортную проверку только для объектной формы: `EventProcessor.add` при `local: false` вызывает `target.hasMethod(method)` и бросает `Метод объекта не обнаружен (<имя>)`; добавить экспортный `hasMethod` в `BslScript` (`src/stdlib/script.ts`); локальная форма (`local: true`) идёт мимо проверки и вызывает метод через `interpreter.invokeMethod`
 - [ ] T022 [US3] Английские алиасы: `ThisObject`, `AddHandler`, `RemoveHandler`, `RaiseEvent` в `src/parser/parser.ts` и `src/runtime/interpreter.ts` (тесты уже в T019)
 - [ ] T023 [US3] Сделать T019 зелёными; регрессия `pnpm typecheck && pnpm test`

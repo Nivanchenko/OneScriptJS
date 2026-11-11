@@ -370,4 +370,41 @@ describe('парсер', () => {
       handlerMethod: { kind: 'StringLiteral', value: 'Обработчик' },
     });
   });
+
+  it('парсит индексные формы источника, события и обработчика', () => {
+    expect(
+      parseExpr('ДобавитьОбработчик Источник["Мое" + "Событие"], ЭтотОбъект["Метод" + "События"]'),
+    ).toMatchObject({
+      kind: 'AddHandlerStatement',
+      eventSource: { kind: 'Identifier', name: 'Источник' },
+      eventName: {
+        kind: 'BinaryExpression',
+        operator: '+',
+        left: { kind: 'StringLiteral', value: 'Мое' },
+        right: { kind: 'StringLiteral', value: 'Событие' },
+      },
+      handlerTarget: { kind: 'Identifier', name: 'ЭтотОбъект' },
+      handlerMethod: {
+        kind: 'BinaryExpression',
+        operator: '+',
+        left: { kind: 'StringLiteral', value: 'Метод' },
+        right: { kind: 'StringLiteral', value: 'События' },
+      },
+    });
+  });
+
+  it('требует имя события в корректной форме', () => {
+    expect(() => parse(tokenize('ДобавитьОбработчик 1, Обработчик;'))).toThrow(
+      /Ожидается имя события/,
+    );
+  });
+
+  it('требует имя обработчика в корректной форме', () => {
+    expect(() => parse(tokenize('ДобавитьОбработчик Ист.Событие, 1;'))).toThrow(
+      /Ожидается имя обработчика события/,
+    );
+    expect(() => parse(tokenize('ДобавитьОбработчик Ист.Событие, Метод();'))).toThrow(
+      /Ожидается имя обработчика события/,
+    );
+  });
 });
