@@ -45,11 +45,11 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 
 - [ ] T002 [P] Добавить AST-узлы `AddHandlerStatement` / `RemoveHandlerStatement` в `src/ast/nodes.ts` и включить их в union `Statement`; поля строго по `data-model.md` §1: `eventSource: Expression`, `eventName: Expression`, `handlerTarget: Expression | null`, `handlerMethod: Expression`
 - [ ] T003 [P] Добавить опциональный `hasMethod?(name: string): boolean` в интерфейс `BslObject` в `src/runtime/object.ts` (не менять существующие реализации)
-- [ ] T004 [P] Написать падающие unit-тесты реестра в `tests/events-registry.test.ts`: порядок вызовов, дедупликация по `(target по ссылке, method.toLowerCase())`, `raise` без подписчиков = no-op, независимость источников
-- [ ] T005 Реализовать `EventProcessor` в `src/runtime/events.ts`: `Map<BslObject, Map<string, Handler[]>>`, `add`/`raise` (список копируется перед обходом), `Handler { target: BslObject; method: string }` — сделать T004 зелёным
+- [ ] T004 [P] Написать падающие unit-тесты реестра в `tests/events-registry.test.ts`: порядок вызовов, дедупликация по `(target по ссылке, method.toLowerCase())`, `raise` без подписчиков = no-op, независимость источников, исключение в обработчике прерывает цепочку и не перехватывается (FR-010)
+- [ ] T005 Реализовать `EventProcessor` в `src/runtime/events.ts`: `Map<BslObject, Map<string, Handler[]>>`; `Handler { target: BslObject; method: string; invoke: (args: Value[]) => Value }`; `add` (дедупликация по `(target, method.toLowerCase())`; при `local: true` проверка `hasMethod` не выполняется) и `raise` (список копируется перед обходом, исключения обработчиков не перехватываются) — сделать T004 зелёным
 - [ ] T006 [P] Подключить реестр к окружению: `events?: EventProcessor` в `RuntimeEnvironment` (`src/runtime/context.ts`) и создание экземпляра в `createGlobalContext` (`src/stdlib/global-context.ts`)
-- [ ] T007 [P] Создать `ScriptModuleObject implements BslObject` в `src/runtime/script-object.ts`: `typeName = 'Сценарий'`, `callMethod` → `interpreter.invokeMethod`, `hasMethod` → `interpreter.hasMethod` (ограничение экспортом — в US3); `getProp`/`setProp`/`getIndex`/`setIndex` бросают ошибку; пометить `shortcut:` про модульные переменные (см. `plan.md`, Complexity Tracking)
-- [ ] T008 Добавить в `src/runtime/interpreter.ts` разрешение идентификатора `ЭтотОбъект`/`ThisObject` (после области видимости и глобалов) → ленивый `ScriptModuleObject`; тест-первым в `tests/events.test.ts` (объект возвращается и у него вызывается метод)
+- [ ] T007 Написать падающий тест в `tests/events.test.ts`: `ЭтотОбъект` возвращает объект-модуль, у которого вызывается метод
+- [ ] T008 Создать `ScriptModuleObject implements BslObject` в `src/runtime/script-object.ts`: `typeName = 'Сценарий'`, `callMethod` → `interpreter.invokeMethod`, `hasMethod` → новый `interpreter.isExported(name)` (добавить в `src/runtime/interpreter.ts`); `getProp`/`setProp`/`getIndex`/`setIndex` бросают ошибку; пометить `shortcut:` про модульные переменные (см. `plan.md`, Complexity Tracking); добавить в `src/runtime/interpreter.ts` разрешение идентификатора `ЭтотОбъект`/`ThisObject` (после области видимости и глобалов) → ленивый `ScriptModuleObject` — сделать T007 зелёным
 - [ ] T009 Добавить в `Interpreter.evalCall` обработку `ВызватьСобытие`/`RaiseEvent`: имя → `toStringValue(args[0])`, параметры — элементы `BslArray` через `iterate()` (иначе пустой массив), доставка через `env.events` на объекте текущего модуля; тест-первым в `tests/events.test.ts`
 
 **Checkpoint**: реестр, объект-модуль и встроенные имена работают; можно начинать истории.
@@ -67,12 +67,12 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 
 ### Tests for User Story 1 ⚠️ (сначала — красные)
 
-- [ ] T010 [P] [US1] Дописать в `tests/events.test.ts` сценарии US1: подписка + событие с двумя параметрами (вызов 1, порядок `"П1"`, `"П2"`); событие без подписчиков — тишина; синхронность (к моменту возврата из `СгенерироватьСобытие` обработчик отработал)
+- [ ] T010 [P] [US1] Дописать в `tests/events.test.ts` сценарии US1: подписка + событие с двумя параметрами (вызов 1, порядок `"П1"`, `"П2"`); событие без подписчиков — тишина; синхронность (к моменту возврата из `СгенерироватьСобытие` обработчик отработал); исключение в обработчике доходит до кода, объявившего событие
 
 ### Implementation for User Story 1
 
-- [ ] T011 [P] [US1] Парсер: `KW_ADD_HANDLER = {добавитьобработчик, addhandler}` и `parseHandler('add')` в `src/parser/parser.ts` — разбор `Объект.Событие` (member) и `Объект["Событие"]` (index) в `eventSource` + `eventName`; обработчик — `Identifier` (`handlerTarget = null`) или member/index; вызов из `parseStatement` до разбора выражения
-- [ ] T012 [P] [US1] Интерпретатор: `case 'AddHandlerStatement'` в `exec` (`src/runtime/interpreter.ts`) — вычислить `eventSource`, `eventName`, `handlerTarget` (`null` → `scriptObject`), `handlerMethod`; вызвать `env.events.add(...)`
+- [ ] T011 [P] [US1] Парсер: `KW_ADD_HANDLER = {добавитьобработчик, addhandler}` и `parseHandler('add')` в `src/parser/parser.ts` — разбор member-источника `Объект.Событие` и обработчика в формах `Identifier` (`handlerTarget = null`) / member; индексные формы и сообщения об ошибках — в US3; тесты разбора — в `tests/parser.test.ts`
+- [ ] T012 [P] [US1] Интерпретатор: `case 'AddHandlerStatement'` в `exec` (`src/runtime/interpreter.ts`) — вычислить `eventSource`, `eventName`, `handlerTarget` (`null` → `scriptObject` с `local: true`; объектная форма → `local: false`), `handlerMethod`; вызвать `env.events.add(...)`
 - [ ] T013 [US1] Сделать сценарии T010 зелёными; прогнать `pnpm typecheck && pnpm test`
 
 **Checkpoint (MVP)**: подписка и доставка работают; `tests/events.test.ts` (US1) зелёные.
@@ -89,12 +89,12 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 
 ### Tests for User Story 2 ⚠️ (сначала — красные)
 
-- [ ] T014 [P] [US2] Дописать в `tests/events.test.ts` сценарии US2: отписка → 0 вызовов; отписка без подписки — без ошибки; повторная подписка → ровно 1 вызов; один метод на двух событиях одного источника — независимость
+- [ ] T014 [P] [US2] Дописать в `tests/events.test.ts` сценарии US2: отписка → 0 вызовов; отписка без подписки — без ошибки; повторная подписка → ровно 1 вызов; три разных обработчика на одно событие → 3 вызова в порядке подписки (SC-002); один метод на двух событиях одного источника — независимость
 
 ### Implementation for User Story 2
 
-- [ ] T015 [P] [US2] Добавить `remove` и дедупликацию `add` в `src/runtime/events.ts` (отсутствующая подписка — no-op; удаление не меняет порядок остальных)
-- [ ] T016 [P] [US2] Парсер: `KW_REMOVE_HANDLER = {удалитьобработчик, removehandler}` и `parseHandler('remove')` в `src/parser/parser.ts` → `RemoveHandlerStatement`
+- [ ] T015 [P] [US2] Добавить `remove` в `src/runtime/events.ts` (отсутствующая подписка — no-op; удаление не меняет порядок остальных); дедупликация и `raise` уже реализованы в T005
+- [ ] T016 [P] [US2] Парсер: `KW_REMOVE_HANDLER = {удалитьобработчик, removehandler}` и `parseHandler('remove')` в `src/parser/parser.ts` → `RemoveHandlerStatement`; тесты разбора — в `tests/parser.test.ts`
 - [ ] T017 [P] [US2] Интерпретатор: `case 'RemoveHandlerStatement'` в `exec` (`src/runtime/interpreter.ts`) → `env.events.remove(...)`
 - [ ] T018 [US2] Сделать T014 зелёными; регрессия `pnpm typecheck && pnpm test`
 
@@ -108,16 +108,16 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 ошибки разбора и ошибка «Метод объекта не обнаружен» для неэкспортного метода.
 
 **Independent Test**: Подписка `Источник["Мое" + "Событие"]` на локальный метод
-`ОбработчикМодуля` срабатывает; неверная форма даёт локализованную ошибку.
+`ОбработчикМодуля` (неэкспортный) срабатывает; неверная форма даёт локализованную ошибку.
 
 ### Tests for User Story 3 ⚠️ (сначала — красные)
 
-- [ ] T019 [P] [US3] Дописать в `tests/events.test.ts` сценарии US3: индексные формы источника/имени/метода; локальный метод при одноимённой переменной (выбирается метод); ошибки разбора «Ожидается имя события» и «Ожидается имя обработчика события»; неэкспортный метод через `ЭтотОбъект` → «Метод объекта не обнаружен»; исключение в обработчике прерывает цепочку; английские алиасы `AddHandler`/`RemoveHandler`/`RaiseEvent`/`ThisObject`
+- [ ] T019 [P] [US3] Дописать в `tests/events.test.ts` сценарии US3: индексные формы источника/имени/метода; локальный (неэкспортный) метод по имени срабатывает при одноимённой переменной (выбирается метод); неэкспортный метод через `ЭтотОбъект` → «Метод объекта не обнаружен»; английские алиасы `AddHandler`/`RemoveHandler`/`RaiseEvent`/`ThisObject`
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Парсер (`src/parser/parser.ts`): поддержка `IndexExpression` для источника и обработчика, проверка формы с сообщениями и позицией из `contracts/event-handler-contract.md` §2 («Ожидается имя события» / «Ожидается имя обработчика события»)
-- [ ] T021 [US3] Ограничить `ScriptModuleObject.hasMethod` экспортными методами (`src/runtime/script-object.ts`) и проверять `hasMethod` в `EventProcessor.add` (`src/runtime/events.ts`), ошибка `Метод объекта не обнаружен (<имя>)`
+- [ ] T020 [US3] Парсер (`src/parser/parser.ts`): поддержка `IndexExpression` для источника и обработчика; проверка формы с сообщениями и позицией из `contracts/event-handler-contract.md` §2 («Ожидается имя события» / «Ожидается имя обработчика события»); тесты разбора — в `tests/parser.test.ts`
+- [ ] T021 [US3] Включить экспортную проверку только для объектной формы: `EventProcessor.add` при `local: false` вызывает `target.hasMethod(method)` и бросает `Метод объекта не обнаружен (<имя>)`; добавить экспортный `hasMethod` в `BslScript` (`src/stdlib/script.ts`); локальная форма (`local: true`) идёт мимо проверки и вызывает метод через `interpreter.invokeMethod`
 - [ ] T022 [US3] Английские алиасы: `ThisObject`, `AddHandler`, `RemoveHandler`, `RaiseEvent` в `src/parser/parser.ts` и `src/runtime/interpreter.ts` (тесты уже в T019)
 - [ ] T023 [US3] Сделать T019 зелёными; регрессия `pnpm typecheck && pnpm test`
 
@@ -130,7 +130,7 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 - [ ] T024 [P] Браузерная приёмка: `tests/browser-events.test.ts` на happy-dom — `<one-script>` с `ДобавитьОбработчик` и объявлением события, проверка вывода через `console.log`
 - [ ] T025 [P] Проверить ядро на изоляцию сред: в `src/lexer`, `src/parser`, `src/ast`, `src/runtime`, `src/stdlib` нет импортов `node:*`, `fs`, `path`, `document`, `window` (grep); собрать `pnpm build:browser`
 - [ ] T026 [P] Обновить документацию: `docs/status.md` (T44 закрыт, отложенный полный прогон `events.os` → T39) и отметка T44 в `docs/plan.md`
-- [ ] T027 Финальная проверка по `quickstart.md` и `plan.md` → Verification: `pnpm typecheck && pnpm test`, `pnpm build:browser`, `node scripts/run-reference-tests.mjs` (не хуже 18/66); зафиксировать вывод
+- [ ] T027 Финальная проверка по `quickstart.md` и `plan.md` → Verification: `pnpm typecheck && pnpm test`, `pnpm build`, `node scripts/run-reference-tests.mjs` (не хуже 18/66); зафиксировать вывод
 
 ---
 
@@ -141,7 +141,8 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 - **Setup (T001)**: без зависимостей.
 - **Foundational (T002–T009)**: после T001; **блокирует** US1–US3.
   - T005 после T004 (тест-первым); T004 [P] параллельно с T002/T003.
-  - T006/T007 [P] параллельно с T002–T005.
+  - T006 [P] параллельно с T002–T005.
+  - T007 → T008 (тест-первым: сначала красный тест на `ЭтотОбъект`).
   - T008 → T009 (оба `interpreter.ts` и `tests/events.test.ts` — последовательно).
 - **US1 (T010–T013)**: после Foundational.
 - **US2 (T014–T018)**: после US1 (общие файлы `parser.ts`, `interpreter.ts`, `events.ts`).
@@ -151,7 +152,7 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 ### User Story Dependencies
 
 - **US1 (P1)**: MVP, ни от чего не зависит после Foundational.
-- **US2 (P2)**: расширяет US1 (реестр и парсер), но проверяется собственными сценариями.
+- **US2 (P2)**: расширяет US1 (`remove`, парсер `УдалитьОбработчик`), проверяется собственными сценариями.
 - **US3 (P3)**: расширяет US1/US2 формами и диагностикой; независимо тестируется через T019.
 
 ### Within Each User Story
@@ -161,9 +162,9 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 
 ### Parallel Opportunities
 
-- Phase 2: T002, T003, T004, T006, T007 — разные файлы.
+- Phase 2: T002, T003, T004, T006 — разные файлы.
 - US1: T010, T011, T012 — разные файлы (`tests/events.test.ts`, `parser.ts`, `interpreter.ts`).
-- US2: T014–T017 — разные файлы.
+- US2: T014–T017 — разные файлы (`events.test.ts`, `events.ts`, `parser.ts`, `interpreter.ts`).
 - Polish: T024, T025, T026 — независимы.
 
 ---
@@ -201,3 +202,5 @@ T013 — прогон и регрессия
 - Тесты пишутся до реализации и сначала должны падать (принцип III).
 - Коммиты — только по явной просьбе пользователя; в задачи не входят.
 - `events.os` целиком не входит в приёмку (T39: `ПодключитьСценарий`) — см. `plan.md`, Complexity Tracking.
+- Экспортные ограничения касаются только объектной формы подписки; голый идентификатор
+  (локальный метод) — всегда допустим (см. `research.md` R4, `data-model.md` §2).

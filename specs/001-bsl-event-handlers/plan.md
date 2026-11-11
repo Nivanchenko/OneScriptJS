@@ -109,11 +109,12 @@ src/
 │   ├── interpreter.ts          # + этотобъект/вызватьсобытие, исполнение операторов
 │   └── runner.ts               # без изменений
 ├── stdlib/
-│   └── global-context.ts       # + создание EventProcessor
-└── index.ts                    # + экспорт EventProcessor (для тестов/расширений)
+│   ├── global-context.ts       # + создание EventProcessor
+│   └── script.ts               # + export-only hasMethod у BslScript (FR-011)
 
 tests/
-├── events.test.ts              # новый: 8 сценариев events.os + ошибки и краевые случаи
+├── events.test.ts              # новый: 8 сценариев events.os + краевые случаи
+├── events-registry.test.ts     # новый: unit-тесты EventProcessor
 ├── parser.test.ts              # + разбор операторов и диагностика
 ├── browser-events.test.ts      # новый: <one-script> в happy-dom
 └── acceptance.test.ts          # без изменений (регрессия)
@@ -136,7 +137,7 @@ tests/
 
 ```bash
 pnpm typecheck && pnpm test          # ожидается: 0 ошибок, все тесты зелёные (300 + новые)
-pnpm build:browser                   # ожидается: dist/onescript.js собирается
+pnpm build                           # ожидается: браузер, Node-библиотека, CLI и типы собираются
 node scripts/run-reference-tests.mjs # ожидается: 18/66 без регрессий (events.os остаётся в 18)
 ```
 
