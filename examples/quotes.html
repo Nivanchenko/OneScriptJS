@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>OneScript: кавычки в строковых литералах</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+    h2 { margin-bottom: .25rem; }
+    pre { background: #f4f4f4; padding: 1rem; border-radius: .5rem; overflow-x: auto; }
+    code { background: #f4f4f4; padding: 0 .25rem; }
+  </style>
+</head>
+<body>
+  <h1>Экранирование кавычек</h1>
+  <p>Внутри строкового литерала кавычка удваивается: <code>""</code> — это одна кавычка.
+     Пара <code>""</code> «съедается» лексером, одиночная <code>"</code> закрывает строку.</p>
+
+  <h2>Код</h2>
+  <pre id="код"></pre>
+
+  <h2>Вывод Сообщить()</h2>
+  <pre id="вывод"></pre>
+  <div id="контейнер"></div>
+
+  <script src="/onescript.js"></script>
+
+  <one-script>
+    Перем Текст;
+
+    Процедура НажатиеКнопки(Сообщение)
+      Сообщить(Сообщение);
+    КонецПроцедуры
+
+    Текст = "Мир";
+
+    Сообщить("Привет """ + Текст + """!");
+    Сообщить("Привет """ + Текст + "!""");
+
+    Рандом = Строка(Новый УникальныйИдентификатор);
+
+    Кнопка = Документ.СоздатьЭлемент("button");
+    Кнопка.Текст = "Сообщить";
+    Кнопка.НаСобытие("Нажатие","НажатиеКнопки(""Текст " + Рандом + """)");
+    Кнопка.ДобавитьВ(Документ.ПолучитьЭлемент("контейнер"));
+
+  </one-script>
+
+  <script>
+    // Показываем исходник <one-script> на странице: сам элемент скрыт стилем движка.
+    document.getElementById('код').textContent =
+      document.querySelector('one-script').textContent.trim();
+
+    // Сообщить() пишет в console.log — дублируем вывод на страницу, чтобы результат
+    // был виден без devtools. Оригинальный console.log при этом не отключаем.
+    const вывод = document.getElementById('вывод');
+    const оригинал = console.log;
+    console.log = (...args) => {
+      оригинал(...args);
+      вывод.textContent += args.join(' ') + '\n';
+    };
+  </script>
+</body>
+</html>
