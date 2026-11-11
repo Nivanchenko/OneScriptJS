@@ -290,10 +290,12 @@ Outline показывает методы и регионы; definition ведё
 - [X] T053 Полная проверка по `quickstart.md`: `pnpm typecheck && pnpm test && pnpm build`
   (порядок browser → node → cli → lsp), smoke `node dist/lsp/server.mjs`, вывод
   зафиксировать (конституция V)
-- [X] T054 Ручная проверка по `quickstart.md` в LSP-клиенте (Neovim/Zed) заменена
-  протокольными/смоук-тестами: в окружении нет редактора; ограничение зафиксировано в
-  `docs/status.md`. Сценарии покрыты `tests/lsp-protocol.test.ts`, `tests/lsp-server-smoke.test.ts`
-  и unit-тестами провайдеров
+- [X] T054 Ручная проверка по `quickstart.md` выполнена в Neovim 0.12.2 (конфиг
+  `~/.config/nvim/lua/osjs.lua`): подсветка (semantic tokens), диагностика, completion
+  (`Сообщить`), hover, `definition` (локальный метод и импортированный `.osjs`),
+  outline (`documentSymbol`) — подтверждены владельцем. Не проверялось визуально только
+  поведение `.os` (зафиксировано в `docs/status.md`); протокольные/smoke-тесты —
+  дополнительно
 
 ---
 
