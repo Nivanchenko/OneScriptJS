@@ -35,8 +35,8 @@ const KW_RAISE = new Set(['вызватьисключение', 'raise']);
 const KW_NEW = new Set(['новый', 'new']);
 const KW_GOTO = new Set(['перейти', 'goto']);
 const KW_EXECUTE = new Set(['выполнить', 'execute']);
-const KW_ADD_HANDLER = new Set(['добавитьобработчик']);
-const KW_REMOVE_HANDLER = new Set(['удалитьобработчик']);
+const KW_ADD_HANDLER = new Set(['добавитьобработчик', 'addhandler']);
+const KW_REMOVE_HANDLER = new Set(['удалитьобработчик', 'removehandler']);
 
 // Ключевые слова конца блока: завершают оператор без ';'.
 const END_OF_BLOCK = new Set([

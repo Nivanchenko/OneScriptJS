@@ -452,7 +452,9 @@ export class Interpreter {
         const global = this.env.resolveGlobal?.(expr.name);
         if (global !== undefined) return global;
         // Встроенное имя: разрешается после области видимости и глобалов.
-        if (key(expr.name) === 'этотобъект') return this.getThisObject();
+        if (key(expr.name) === 'этотобъект' || key(expr.name) === 'thisobject') {
+          return this.getThisObject();
+        }
         return undefined;
       }
       case 'BinaryExpression':
@@ -546,7 +548,7 @@ export class Interpreter {
         return new BslErrorInfo(ctx.currentError ?? '');
       }
       // shortcut: ВызватьСобытие живёт здесь — событие объявляется на объекте текущего модуля.
-      if (lower === 'вызватьсобытие') {
+      if (lower === 'вызватьсобытие' || lower === 'raiseevent') {
         const name = toStringValue(this.eval(expr.args[0]!, scope, ctx));
         const value = expr.args[1] === undefined ? undefined : this.eval(expr.args[1]!, scope, ctx);
         const params = isBslObject(value) && value.iterate ? value.iterate() : [];
