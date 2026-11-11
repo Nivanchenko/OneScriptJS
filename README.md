@@ -142,7 +142,7 @@ pnpm build          # полная сборка
 ```
 
 См. также [`AGENTS.md`](AGENTS.md), [`docs/architecture.md`](docs/architecture.md),
-[`docs/plan.md`](docs/plan.md), [`docs/bsl-surface.md`](docs/bsl-surface.md).
+[`specs/`](specs/) (спецификации незавершённых работ), [`docs/bsl-surface.md`](docs/bsl-surface.md).
 
 ## Лицензия
 

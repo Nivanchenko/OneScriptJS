@@ -165,7 +165,8 @@ OneScriptJS/
 
 - [`task.md`](task.md) — исходное ТЗ и приёмочный HTML-пример.
 - [`docs/architecture.md`](docs/architecture.md) — карта слоёв и статус переноса.
-- [`docs/plan.md`](docs/plan.md) — план задач (фазы T1–T20, порядок и приёмка).
+- [`specs/`](specs/) — спецификации незавершённых работ (001–007); план и задачи
+  создаются в каталоге конкретной спеки по мере готовности.
 - [`docs/bsl-surface.md`](docs/bsl-surface.md) — синтаксис и stdlib BSL (по `reference/tests`).
 - `reference/OneScript/AGENTS.md` — инструкции к оригиналу (для справки).
 - `reference/OneScript/docs/developer_docs.md` — архитектура C#-движка.
