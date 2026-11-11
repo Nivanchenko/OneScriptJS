@@ -132,7 +132,7 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T024 [P] Браузерная приёмка: `tests/browser-events.test.ts` на happy-dom — `<one-script>` с `ДобавитьОбработчик` и объявлением события, проверка вывода через `console.log`
+- [x] T024 [P] Браузерная приёмка: `tests/browser-events.test.ts` на happy-dom — `<one-script>` с `ДобавитьОбработчик` и объявлением события, проверка вывода через `console.log`
 - [ ] T025 [P] Проверить ядро на изоляцию сред: в `src/lexer`, `src/parser`, `src/ast`, `src/runtime`, `src/stdlib` нет импортов `node:*`, `fs`, `path`, `document`, `window` (grep); собрать `pnpm build:browser`
 - [ ] T026 [P] Обновить документацию: `docs/status.md` (T44 закрыт, отложенный полный прогон `events.os` → T39) и отметка T44 в `docs/plan.md`
 - [ ] T027 Финальная проверка по `quickstart.md` и `plan.md` → Verification: `pnpm typecheck && pnpm test`, `pnpm build`, `node scripts/run-reference-tests.mjs` (не хуже 18/66); зафиксировать вывод
