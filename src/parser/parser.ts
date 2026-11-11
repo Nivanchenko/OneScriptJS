@@ -62,6 +62,10 @@ function isLValue(expr: Expression): expr is LValue {
 class Parser {
   private current = 0;
   private readonly eof: Token;
+  /** Контекст исполнения для проверок `Возврат`/`Прервать`/`Продолжить`/`ВызватьИсключение`. */
+  private methodKind: 'procedure' | 'function' | null = null;
+  private loopDepth = 0;
+  private exceptDepth = 0;
 
   constructor(private readonly tokens: Token[]) {
     this.eof = tokens[tokens.length - 1]!;
@@ -189,6 +193,8 @@ class Parser {
   private parseMethod(): Statement {
     const start = this.advance(); // 'процедура' | 'функция'
     const isFunction = KW_FUNCTION.has(start.lexeme.toLowerCase());
+    const previousMethod = this.methodKind;
+    this.methodKind = isFunction ? 'function' : 'procedure';
     const name = this.expectIdentifier();
     this.expectOp('(');
     const params: MethodParameter[] = [];
@@ -211,6 +217,7 @@ class Parser {
 
     this.expectKeyword(endKw);
     this.matchEndOfStatement();
+    this.methodKind = previousMethod;
     return {
       kind: 'MethodDeclaration',
       pos: this.posOf(start),
@@ -234,6 +241,15 @@ class Parser {
     const start = this.advance(); // 'возврат'
     let value: Expression | undefined;
     if (this.peek().type !== TokenType.EndOfStatement) value = this.parseExpression();
+
+    if (this.methodKind === null) {
+      this.error('Оператор "Возврат" может использоваться только внутри метода');
+    } else if (this.methodKind === 'function' && value === undefined) {
+      this.error('Функция должна возвращать значение');
+    } else if (this.methodKind === 'procedure' && value !== undefined) {
+      this.error('Процедуры не могут возвращать значение');
+    }
+
     this.expectEndOfStatement();
     return { kind: 'ReturnStatement', pos: this.posOf(start), value };
   }
@@ -290,12 +306,18 @@ class Parser {
 
   private parseBreak(): Statement {
     const start = this.advance();
+    if (this.loopDepth === 0) {
+      this.error('Оператор "Прервать" может использоваться только внутри цикла');
+    }
     this.expectEndOfStatement();
     return { kind: 'BreakStatement', pos: this.posOf(start) };
   }
 
   private parseContinue(): Statement {
     const start = this.advance();
+    if (this.loopDepth === 0) {
+      this.error('Оператор "Продолжить" может использоваться только внутри цикла');
+    }
     this.expectEndOfStatement();
     return { kind: 'ContinueStatement', pos: this.posOf(start) };
   }
@@ -304,7 +326,13 @@ class Parser {
     const start = this.expectKeyword(KW_TRY);
     const tryBody = this.parseStatementsUntil(KW_EXCEPT);
     this.expectKeyword(KW_EXCEPT);
-    const exceptBody = this.parseStatementsUntil(KW_ENDTRY);
+    this.exceptDepth += 1;
+    let exceptBody: Statement[];
+    try {
+      exceptBody = this.parseStatementsUntil(KW_ENDTRY);
+    } finally {
+      this.exceptDepth -= 1;
+    }
     this.expectKeyword(KW_ENDTRY);
     this.matchEndOfStatement();
     return { kind: 'TryExceptStatement', pos: this.posOf(start), tryBody, exceptBody };
@@ -314,6 +342,11 @@ class Parser {
     const start = this.advance(); // 'вызватьисключение'
     let value: Expression | undefined;
     if (this.peek().type !== TokenType.EndOfStatement) value = this.parseExpression();
+    if (value === undefined && this.exceptDepth === 0) {
+      this.error(
+        'Оператор "ВызватьИсключение" без параметров может использоваться только в блоке "Исключение"',
+      );
+    }
     this.expectEndOfStatement();
     return { kind: 'RaiseStatement', pos: this.posOf(start), value };
   }
@@ -327,7 +360,12 @@ class Parser {
 
   private parseLoopBody(): Statement[] {
     const body: Statement[] = [];
-    while (!this.isEnd() && !this.isKeyword(KW_ENDLOOP)) body.push(this.parseStatement());
+    this.loopDepth += 1;
+    try {
+      while (!this.isEnd() && !this.isKeyword(KW_ENDLOOP)) body.push(this.parseStatement());
+    } finally {
+      this.loopDepth -= 1;
+    }
     this.expectKeyword(KW_ENDLOOP);
     this.matchEndOfStatement();
     return body;
