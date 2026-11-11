@@ -51,6 +51,11 @@ export class BslScript implements BslObject {
     return this.withCurrent(() => this.interpreter.callExportedMethod(name, args));
   }
 
+  /** Экспортный метод доступен снаружи (проверка подписки на событие, FR-011). */
+  hasMethod(name: string): boolean {
+    return this.interpreter.hasExportedMethod(name);
+  }
+
   getProp(name: string): Value {
     switch (name.toLowerCase()) {
       case 'источник':
