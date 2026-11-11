@@ -22,12 +22,32 @@ interface CondCtx {
   elseDone: boolean;
 }
 
+/** Импорт файла из директивы `#Использовать "<путь>"`. */
+export interface ImportDirective {
+  path: string;
+  line: number;
+}
+
+export interface PreprocessResult {
+  tokens: Token[];
+  imports: ImportDirective[];
+}
+
 /**
  * Препроцессор: убирает директивы `#Область`/`#КонецОбласти`/`#Использовать`
- * (no-op) и выполняет условную компиляцию `#Если`/`#ИначеЕсли`/`#Иначе`/`#КонецЕсли`.
+ * и выполняет условную компиляцию `#Если`/`#ИначеЕсли`/`#Иначе`/`#КонецЕсли`.
  */
 export function preprocess(tokens: Token[]): Token[] {
+  return preprocessScript(tokens).tokens;
+}
+
+/**
+ * То же, что `preprocess`, но дополнительно возвращает импорты файлов —
+ * только из активных веток `#Если`.
+ */
+export function preprocessScript(tokens: Token[]): PreprocessResult {
   const result: Token[] = [];
+  const imports: ImportDirective[] = [];
   const stack: CondCtx[] = [];
   const isEmitting = (): boolean => stack.every((c) => c.thisActive);
 
@@ -40,8 +60,13 @@ export function preprocess(tokens: Token[]): Token[] {
     if (token.type === TokenType.Preprocessor) {
       const { directive, rest } = parseDirective(token.lexeme);
 
-      if (DIR_REGION.has(directive) || DIR_ENDREGION.has(directive) || DIR_USE.has(directive)) {
+      if (DIR_REGION.has(directive) || DIR_ENDREGION.has(directive)) {
         // no-op
+      } else if (DIR_USE.has(directive)) {
+        if (isEmitting()) {
+          const path = parseImportPath(rest, token.line);
+          if (path !== undefined) imports.push({ path, line: token.line });
+        }
       } else if (DIR_IF.has(directive)) {
         const parentActive = isEmitting();
         const active = parentActive && toBoolean(evalCondition(rest));
@@ -68,7 +93,7 @@ export function preprocess(tokens: Token[]): Token[] {
     if (isEmitting()) result.push(token);
   }
 
-  return result;
+  return { tokens: result, imports };
 }
 
 function parseDirective(lexeme: string): { directive: string; rest: string } {
@@ -77,6 +102,39 @@ function parseDirective(lexeme: string): { directive: string; rest: string } {
   const directive = (sp === -1 ? body : body.slice(0, sp)).toLowerCase();
   const rest = sp === -1 ? '' : body.slice(sp + 1).trim();
   return { directive, rest };
+}
+
+/**
+ * Путь из строки в кавычках; `undefined` — директива без кавычек (имя библиотеки,
+ * исторически no-op). Хвостовой `//`-комментарий после закрывающей кавычки игнорируется.
+ */
+function parseImportPath(rest: string, line: number): string | undefined {
+  const text = rest.trim();
+  if (!text.startsWith('"')) return undefined;
+
+  let path = '';
+  let i = 1;
+  for (;;) {
+    if (i >= text.length) {
+      throw new Error(`Незакрытая строка в директиве #Использовать (строка ${line})`);
+    }
+    const ch = text[i]!;
+    if (ch === '"') {
+      if (text[i + 1] === '"') {
+        path += '"';
+        i += 2;
+        continue;
+      }
+      break;
+    }
+    path += ch;
+    i += 1;
+  }
+
+  if (path === '') {
+    throw new Error(`Пустой путь в директиве #Использовать (строка ${line})`);
+  }
+  return path;
 }
 
 function evalCondition(rest: string): Value {

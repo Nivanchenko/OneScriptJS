@@ -70,8 +70,46 @@ class Parser {
   parse(): Program {
     const start = this.peek();
     const body: Statement[] = [];
-    while (!this.isEnd()) body.push(this.parseStatement());
+
+    // Канонический порядок секций модуля: переменные → методы → исполняемый код
+    // (DefaultBslParser: BuildVariablesSection → BuildMethodsSection → BuildModuleBody).
+    this.skipModuleSeparators();
+    while (this.isKeyword(KW_VAR)) {
+      body.push(this.parseVariableDeclaration());
+      this.skipModuleSeparators();
+    }
+
+    while (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) {
+      body.push(this.parseMethod());
+      this.skipModuleSeparators();
+    }
+
+    while (!this.isEnd()) {
+      if (this.isKeyword(KW_VAR)) {
+        this.error(
+          'объявления переменных должны быть расположены в начале модуля, процедуры или функции',
+        );
+      }
+      if (this.isKeyword(KW_PROCEDURE) || this.isKeyword(KW_FUNCTION)) {
+        this.error('объявление метода должно быть расположено до исполняемого кода');
+      }
+      body.push(this.parseStatement());
+      this.skipModuleSeparators();
+    }
+
     return { kind: 'Program', pos: this.posOf(start), body };
+  }
+
+  /** Пропускает `;`, пустые операторы и аннотации между секциями модуля. */
+  private skipModuleSeparators(): void {
+    for (;;) {
+      if (this.matchEndOfStatement()) continue;
+      if (this.checkOp('&')) {
+        this.skipAnnotation();
+        continue;
+      }
+      break;
+    }
   }
 
   // --- операторы ---
@@ -190,12 +228,19 @@ class Parser {
   private parseVariableDeclaration(): Statement {
     const start = this.advance(); // 'перем'
     const names: string[] = [];
+    const exportedNames: string[] = [];
     do {
-      names.push(this.expectIdentifier().lexeme);
-      this.matchKeyword(KW_EXPORT);
+      const name = this.expectIdentifier().lexeme;
+      names.push(name);
+      if (this.matchKeyword(KW_EXPORT)) exportedNames.push(name);
     } while (this.matchOp(','));
     this.expectEndOfStatement();
-    return { kind: 'VariableDeclaration', pos: this.posOf(start), names };
+    return {
+      kind: 'VariableDeclaration',
+      pos: this.posOf(start),
+      names,
+      ...(exportedNames.length > 0 ? { exportedNames } : {}),
+    };
   }
 
   private parseFor(): Statement {

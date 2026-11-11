@@ -156,6 +156,27 @@ describe('парсер', () => {
     expect(stmt.body[1]).toMatchObject({ pos: { line: 2, column: 3 } });
   });
 
+  it('требует порядок секций: Перем → методы → код', () => {
+    expect(() => parse(tokenize('X = 1;\nФункция Ф()\nКонецФункции'))).toThrow(
+      'объявление метода должно быть расположено до исполняемого кода',
+    );
+    expect(() => parse(tokenize('Процедура П()\nКонецПроцедуры\nПерем X;'))).toThrow(
+      'объявления переменных должны быть расположены в начале модуля',
+    );
+    expect(() => parse(tokenize('X = 1;\nПерем Y;'))).toThrow(
+      'объявления переменных должны быть расположены в начале модуля',
+    );
+  });
+
+  it('принимает канонический порядок секций', () => {
+    const program = parse(tokenize('Перем X;\nПроцедура П()\nКонецПроцедуры\nX = 1;'));
+    expect(program.body.map((s) => s.kind)).toEqual([
+      'VariableDeclaration',
+      'MethodDeclaration',
+      'Assignment',
+    ]);
+  });
+
   it('парсит множественное объявление Перем a, b, c;', () => {
     const program = parse(tokenize('Перем а, б, в;'));
     expect(program.body[0]).toMatchObject({
@@ -169,7 +190,21 @@ describe('парсер', () => {
     expect(program.body[0]).toMatchObject({
       kind: 'VariableDeclaration',
       names: ['Поле1', 'Поле2'],
+      exportedNames: ['Поле1'],
     });
+  });
+
+  it('парсит Перем с Экспорт у нескольких имён', () => {
+    const program = parse(tokenize('Перем А Экспорт, Б, В Экспорт;'));
+    expect(program.body[0]).toMatchObject({
+      names: ['А', 'Б', 'В'],
+      exportedNames: ['А', 'В'],
+    });
+  });
+
+  it('не добавляет exportedNames без Экспорт', () => {
+    const program = parse(tokenize('Перем А, Б;'));
+    expect(program.body[0]).not.toHaveProperty('exportedNames');
   });
 
   it('парсит пропущенные аргументы вызова f(,23) и f(a,,c)', () => {

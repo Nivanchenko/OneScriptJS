@@ -10,6 +10,7 @@ export { parse } from './parser/parser';
 export { preprocess } from './parser/preprocessor';
 export { createGlobalContext } from './stdlib/global-context';
 export { run } from './runtime/runner';
+export type { RunOptions } from './runtime/runner';
 export { runTests } from './testing/runner';
 export type { TestResult } from './testing/runner';
 export { BslTestContext } from './testing/test-context';

@@ -7,6 +7,7 @@
  * Подключается как <script src="/onescript.js"></script>.
  */
 import { run } from '../runtime/runner';
+import { preloadModuleSources, resolveUrlPath } from './module-source';
 import { createBrowserGlobalContext } from './context';
 import { registerScriptContext, scheduleDeclarativeBinding } from './dom-events';
 
@@ -42,8 +43,17 @@ class OneScriptElement extends HTMLElement {
     const ctx = createBrowserGlobalContext();
     // Контекст нужен декларативным обработчикам (`data-os-*`) в этом <one-script>.
     registerScriptContext(this.id || null, ctx);
-    run(this.textContent ?? '', ctx);
-    scheduleDeclarativeBinding();
+    const source = this.textContent ?? '';
+    const baseUrl = document.baseURI;
+
+    void preloadModuleSources(source, baseUrl)
+      .then((modules) => {
+        run(source, ctx, { basePath: baseUrl, modules, resolve: resolveUrlPath });
+        scheduleDeclarativeBinding();
+      })
+      .catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : String(error));
+      });
   }
 }
 
