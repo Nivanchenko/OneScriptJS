@@ -35,6 +35,8 @@ const KW_RAISE = new Set(['вызватьисключение', 'raise']);
 const KW_NEW = new Set(['новый', 'new']);
 const KW_GOTO = new Set(['перейти', 'goto']);
 const KW_EXECUTE = new Set(['выполнить', 'execute']);
+const KW_ADD_HANDLER = new Set(['добавитьобработчик', 'addhandler']);
+const KW_REMOVE_HANDLER = new Set(['удалитьобработчик', 'removehandler']);
 
 // Ключевые слова конца блока: завершают оператор без ';'.
 const END_OF_BLOCK = new Set([
@@ -140,6 +142,8 @@ class Parser {
     if (this.isKeyword(KW_RAISE)) return this.parseRaise();
     if (this.isKeyword(KW_GOTO)) return this.parseGoto();
     if (this.isKeyword(KW_EXECUTE)) return this.parseExecute();
+    if (this.isKeyword(KW_ADD_HANDLER)) return this.parseHandler('add');
+    if (this.isKeyword(KW_REMOVE_HANDLER)) return this.parseHandler('remove');
     if (this.checkOp('~')) return this.parseLabel();
 
     const save = this.current;
@@ -356,6 +360,53 @@ class Parser {
     const value = this.parseExpression();
     this.expectEndOfStatement();
     return { kind: 'ExecuteStatement', pos: this.posOf(start), value };
+  }
+
+  /**
+   * `ДобавитьОбработчик <источник>, <обработчик>`: форма разбирается структурно —
+   * обработчик не вычисляется как значение (это ссылка на метод).
+   */
+  private parseHandler(kind: 'add' | 'remove'): Statement {
+    const start = this.advance(); // ключевое слово
+    const eventRef = this.parsePostfix();
+    let eventSource: Expression;
+    let eventName: Expression;
+    if (eventRef.kind === 'MemberExpression') {
+      eventSource = eventRef.object;
+      eventName = { kind: 'StringLiteral', pos: eventRef.pos, value: eventRef.property };
+    } else if (eventRef.kind === 'IndexExpression') {
+      eventSource = eventRef.object;
+      eventName = eventRef.index;
+    } else {
+      this.error('Ожидается имя события');
+    }
+
+    this.expectOp(',');
+    const handlerRef = this.parsePostfix();
+    let handlerTarget: Expression | null;
+    let handlerMethod: Expression;
+    if (handlerRef.kind === 'Identifier') {
+      handlerTarget = null;
+      handlerMethod = { kind: 'StringLiteral', pos: handlerRef.pos, value: handlerRef.name };
+    } else if (handlerRef.kind === 'MemberExpression') {
+      handlerTarget = handlerRef.object;
+      handlerMethod = { kind: 'StringLiteral', pos: handlerRef.pos, value: handlerRef.property };
+    } else if (handlerRef.kind === 'IndexExpression') {
+      handlerTarget = handlerRef.object;
+      handlerMethod = handlerRef.index;
+    } else {
+      this.error('Ожидается имя обработчика события');
+    }
+
+    this.expectEndOfStatement();
+    return {
+      kind: kind === 'add' ? 'AddHandlerStatement' : 'RemoveHandlerStatement',
+      pos: this.posOf(start),
+      eventSource,
+      eventName,
+      handlerTarget,
+      handlerMethod,
+    };
   }
 
   private parseLoopBody(): Statement[] {

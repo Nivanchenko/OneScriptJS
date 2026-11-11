@@ -1,6 +1,7 @@
 import type { Value } from './values';
 import type { BslObject } from './object';
 import type { Interpreter } from './interpreter';
+import { EventProcessor } from './events';
 import type { ImportDirective } from '../parser/preprocessor';
 
 /** Глобальная функция BSL: принимает значения аргументов, возвращает значение. */
@@ -15,6 +16,8 @@ export interface RuntimeEnvironment {
   construct(typeName: string, args: Value[]): Value;
   /** Резолвит глобальное значение (перечисление и т.п.); undefined, если нет. */
   resolveGlobal?(name: string): Value | undefined;
+  /** Реестр подписок на события (у стандартного контекста есть всегда). */
+  events?: EventProcessor;
 }
 
 /** Реестр, достаточный загрузчику модулей: глобальные имена и типы. */
@@ -35,6 +38,8 @@ export class GlobalContext implements RuntimeEnvironment {
   private readonly functions = new Map<string, GlobalFunction>();
   private readonly types = new Map<string, TypeConstructor>();
   private readonly globals = new Map<string, Value>();
+  /** Подписки на события: общие для всех интерпретаторов этого контекста. */
+  readonly events = new EventProcessor();
 
   /** Путь к исполняемому сценарию (для `ТекущийСценарий`). */
   scriptPath?: string;

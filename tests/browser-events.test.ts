@@ -198,3 +198,48 @@ describe('<one-script>: подписка на события из разметк
     expect(window.document.getElementById('счёт')?.textContent).toBe('2');
   });
 });
+
+describe('<one-script>: события BSL', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('ДобавитьОбработчик и объявление события доходят до console.log', async () => {
+    const window = new Window();
+    vi.stubGlobal('window', window);
+    vi.stubGlobal('document', window.document);
+    vi.stubGlobal('customElements', window.customElements);
+    vi.stubGlobal('HTMLElement', window.HTMLElement);
+    window.document.body.innerHTML = '';
+
+    // Модуль кешируется между тестами: перезагружаем, чтобы элемент зарегистрировался в этом Window.
+    vi.resetModules();
+    await import('../src/browser/onescript');
+
+    capture();
+    const el = window.document.createElement('one-script');
+    el.textContent = `
+      Перем Счетчик;
+      Процедура Обработчик(П1, П2) Экспорт
+        Счетчик = Счетчик + 1;
+        Сообщить(П1);
+        Сообщить(П2);
+        Сообщить(Счетчик);
+      КонецПроцедуры
+      Источник = ЗагрузитьСценарийИзСтроки("Процедура Сгенерировать(Имя, Параметры) Экспорт
+      |  ВызватьСобытие(Имя, Параметры);
+      |КонецПроцедуры");
+      Счетчик = 0;
+      ДобавитьОбработчик Источник.МоеСобытие, ЭтотОбъект.Обработчик;
+      Параметры = Новый Массив;
+      Параметры.Добавить("П1");
+      Параметры.Добавить("П2");
+      Источник.Сгенерировать("МоеСобытие", Параметры);
+    `;
+    window.document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(captured).toEqual(['П1', 'П2', '1']);
+  });
+});

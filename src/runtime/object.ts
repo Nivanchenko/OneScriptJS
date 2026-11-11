@@ -14,6 +14,8 @@ export interface BslObject {
   equals?: (other: BslObject) => boolean;
   /** Строковое представление для `Строка()`. */
   toDisplayString?: () => string;
+  /** Есть ли доступный снаружи метод (для проверки подписки на событие). */
+  hasMethod?: (name: string) => boolean;
 }
 
 /** Является ли значение рантайм-объектом BSL. */

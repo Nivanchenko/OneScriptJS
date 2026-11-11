@@ -1,4 +1,5 @@
 import type {
+  AddHandlerStatement,
   BinaryExpression,
   CallExpression,
   Expression,
@@ -10,6 +11,7 @@ import type {
   MemberExpression,
   MethodDeclaration,
   Program,
+  RemoveHandlerStatement,
   Statement,
   TryExceptStatement,
   UnaryExpression,
@@ -23,6 +25,8 @@ import { add, compare, dateFromBsl, equals, toBoolean, toNumber, toStringValue, 
 import type { Value } from './values';
 import type { RuntimeEnvironment } from './context';
 import { isBslObject } from './object';
+import type { BslObject } from './object';
+import { ScriptModuleObject } from './script-object';
 import { BslErrorInfo } from './error-info';
 
 interface Ctx {
@@ -53,8 +57,18 @@ const key = (name: string): string => name.toLowerCase();
 /** Tree-walking интерпретатор BSL. */
 export class Interpreter {
   private moduleCtx: Ctx | null = null;
+  /** Объект текущего модуля; у загруженного сценария подменяется на `BslScript`. */
+  ownerObject?: BslObject;
+  private moduleObject?: ScriptModuleObject;
 
   constructor(readonly env: RuntimeEnvironment) {}
+
+  /** `ЭтотОбъект` — объект текущего модуля (лениво создаётся). */
+  getThisObject(): BslObject {
+    if (this.ownerObject) return this.ownerObject;
+    this.moduleObject ??= new ScriptModuleObject(this);
+    return this.moduleObject;
+  }
 
   /** Оценивает константное выражение (для препроцессора). */
   static evaluate(expr: Expression): Value {
@@ -96,8 +110,10 @@ export class Interpreter {
     const executable = program.body.filter(
       (s) => s.kind !== 'MethodDeclaration' && s.kind !== 'VariableDeclaration',
     );
-    this.execGotoBlock(executable, ctx.moduleScope, ctx);
+    // Модуль «существует» уже во время исполнения своего тела: `ЭтотОбъект` и
+    // события должны работать в том числе из инициализирующего кода.
     this.moduleCtx = ctx;
+    this.execGotoBlock(executable, ctx.moduleScope, ctx);
   }
 
   /** Вызывает метод модуля по имени с готовыми значениями (для тестового раннера). */
@@ -293,6 +309,12 @@ export class Interpreter {
       case 'ExecuteStatement':
         this.execDynamic(toStringValue(this.eval(stmt.value, scope, ctx)), scope, ctx);
         break;
+      case 'AddHandlerStatement':
+        this.execAddHandler(stmt, scope, ctx);
+        break;
+      case 'RemoveHandlerStatement':
+        this.execRemoveHandler(stmt, scope, ctx);
+        break;
       case 'LabelStatement':
         break; // маркер — no-op
       case 'GotoStatement':
@@ -300,8 +322,49 @@ export class Interpreter {
     }
   }
 
-  private execForLoop(stmt: ForLoop, scope: Scope, ctx: Ctx): void {
-    const from = toNumber(this.eval(stmt.from, scope, ctx));
+  /** Подписка: `ДобавитьОбработчик <источник>.<событие>, <обработчик>`. */
+  private execAddHandler(stmt: AddHandlerStatement, scope: Scope, ctx: Ctx): void {
+    const events = this.env.events;
+    if (!events) throw new Error('Реестр событий недоступен в этом окружении');
+    const source = this.eval(stmt.eventSource, scope, ctx);
+    if (!isBslObject(source)) {
+      throw new Error(`Источник события должен быть объектом, а не ${typeName(source)}`);
+    }
+    const eventName = toStringValue(this.eval(stmt.eventName, scope, ctx));
+    const method = toStringValue(this.eval(stmt.handlerMethod, scope, ctx));
+    if (stmt.handlerTarget === null) {
+      // Локальная форма: метод текущего модуля, проверка экспорта не нужна.
+      events.add(source, eventName, this.getThisObject(), method, true, (args) =>
+        this.invokeMethod(method, args),
+      );
+      return;
+    }
+    const target = this.eval(stmt.handlerTarget, scope, ctx);
+    if (!isBslObject(target)) {
+      throw new Error(`Обработчик должен быть объектом, а не ${typeName(target)}`);
+    }
+    events.add(source, eventName, target, method, false);
+  }
+
+  /** Отписка: `УдалитьОбработчик <источник>.<событие>, <обработчик>`. */
+  private execRemoveHandler(stmt: RemoveHandlerStatement, scope: Scope, ctx: Ctx): void {
+    const events = this.env.events;
+    if (!events) throw new Error('Реестр событий недоступен в этом окружении');
+    const source = this.eval(stmt.eventSource, scope, ctx);
+    if (!isBslObject(source)) {
+      throw new Error(`Источник события должен быть объектом, а не ${typeName(source)}`);
+    }
+    const eventName = toStringValue(this.eval(stmt.eventName, scope, ctx));
+    const method = toStringValue(this.eval(stmt.handlerMethod, scope, ctx));
+    const target =
+      stmt.handlerTarget === null ? this.getThisObject() : this.eval(stmt.handlerTarget, scope, ctx);
+    if (!isBslObject(target)) {
+      throw new Error(`Обработчик должен быть объектом, а не ${typeName(target)}`);
+    }
+    events.remove(source, eventName, target, method);
+  }
+
+  private execForLoop(stmt: ForLoop, scope: Scope, ctx: Ctx): void {    const from = toNumber(this.eval(stmt.from, scope, ctx));
     const to = toNumber(this.eval(stmt.to, scope, ctx));
     let completed = true;
     for (let i = from; i <= to; i++) {
@@ -386,7 +449,13 @@ export class Interpreter {
       case 'Identifier': {
         const value = scope.get(expr.name);
         if (value !== undefined) return value;
-        return this.env.resolveGlobal?.(expr.name) ?? undefined;
+        const global = this.env.resolveGlobal?.(expr.name);
+        if (global !== undefined) return global;
+        // Встроенное имя: разрешается после области видимости и глобалов.
+        if (key(expr.name) === 'этотобъект' || key(expr.name) === 'thisobject') {
+          return this.getThisObject();
+        }
+        return undefined;
       }
       case 'BinaryExpression':
         return this.evalBinary(expr, scope, ctx);
@@ -477,6 +546,14 @@ export class Interpreter {
       }
       if (lower === 'информацияобошибке' || lower === 'errorinfo') {
         return new BslErrorInfo(ctx.currentError ?? '');
+      }
+      // shortcut: ВызватьСобытие живёт здесь — событие объявляется на объекте текущего модуля.
+      if (lower === 'вызватьсобытие' || lower === 'raiseevent') {
+        const name = toStringValue(this.eval(expr.args[0]!, scope, ctx));
+        const value = expr.args[1] === undefined ? undefined : this.eval(expr.args[1]!, scope, ctx);
+        const params = isBslObject(value) && value.iterate ? value.iterate() : [];
+        this.env.events?.raise(this.getThisObject(), name, params);
+        return undefined;
       }
       const method = ctx.methods.get(lower);
       if (method) return this.callMethod(method, expr.args, scope, ctx);
