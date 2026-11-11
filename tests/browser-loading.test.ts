@@ -1,23 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Window } from 'happy-dom';
+import { makeScriptBlock, runEngine, flush } from './helpers/browser-script';
 
 /**
- * Регрессия: в реальном браузере `connectedCallback` срабатывает, когда текст
- * `<one-script>` ещё не разобран, а `document.readyState === 'loading'`.
- * Тогда исполнение нужно отложить до `DOMContentLoaded`, иначе запускается пустой код.
+ * Регрессия: при разборе документа `document.readyState === 'loading'`.
+ * Движок должен дождаться `DOMContentLoaded` и только потом собрать блоки,
+ * иначе исполняется пустой/недопарсенный код.
  */
-describe('<one-script>: запуск после разбора документа', () => {
+describe('<script type="text/osjs">: запуск после разбора документа', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
-  it('при readyState=loading ждёт DOMContentLoaded и затем исполняет код', async () => {
-    const window = new Window();
+  it('при readyState=loading ждёт DOMContentLoaded и затем исполняет код один раз', async () => {
+    vi.resetModules();
+    const window = new Window({ url: 'http://localhost/app/' });
     vi.stubGlobal('window', window);
     vi.stubGlobal('document', window.document);
-    vi.stubGlobal('customElements', window.customElements);
-    vi.stubGlobal('HTMLElement', window.HTMLElement);
+    vi.stubGlobal('URL', window.URL);
 
     // Эмулируем разбор: документ ещё загружается.
     let readyState = 'loading';
@@ -28,25 +29,28 @@ describe('<one-script>: запуск после разбора документ�
       logs.push(...args);
     });
 
-    await import('../src/browser/onescript');
+    // Блоки уже в DOM, но движок не должен исполнять их до готовности документа.
+    window.document.body.innerHTML = makeScriptBlock('сообщить("готово");');
+    await runEngine();
+    await flush();
 
-    // Исходник не должен отображаться на странице.
-    const style = window.document.getElementById('one-script-style');
-    expect(style?.textContent).toBe('one-script { display: none; }');
-
-    const el = window.document.createElement('one-script');
-    window.document.body.appendChild(el);
-    // Текст появляется в DOM уже после подключения элемента (как при разборе HTML).
-    el.textContent = 'сообщить("готово");';
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(logs).toEqual([]); // ещё ничего не исполнилось
+    // Наш CSS больше не нужен: script-блок нативно скрыт.
+    expect(window.document.querySelectorAll('style')).toHaveLength(0);
 
     readyState = 'interactive';
     (window.document as unknown as EventTarget).dispatchEvent(
       new window.Event('DOMContentLoaded') as unknown as Event,
     );
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flush();
+
+    expect(logs).toEqual(['готово']);
+
+    // Повторное событие не запускает блоки второй раз.
+    (window.document as unknown as EventTarget).dispatchEvent(
+      new window.Event('DOMContentLoaded') as unknown as Event,
+    );
+    await flush();
 
     expect(logs).toEqual(['готово']);
     spy.mockRestore();

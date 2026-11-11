@@ -11,9 +11,14 @@
 
 - запускаться на **Node.js** и в **браузере**;
 - подключаться в браузере как `<script src="/onescript.js"></script>`;
-- исполнять код из кастомного элемента `<one-script>`; `Сообщить()` — функция
+- исполнять код из HTML data block `<script type="text/osjs">`; `Сообщить()` — функция
   стандартной библиотеки, выводит в JavaScript `console.log` (пример —
   [`examples/hello.html`](examples/hello.html)).
+
+> Форма встраивания пересмотрена: канон — `<script type="text/osjs">`
+> ([`specs/016-osjs-script-tag`](specs/016-osjs-script-tag/spec.md)). Исходное
+> требование из `task.md` (кастомный элемент) остаётся историческим и больше не
+> поддерживается: элемент не регистрируется и не исполняется.
 
 Оригинал на C# лежит в **`reference/OneScript/`** (игнорируется git-ом, см.
 `.gitignore`). Это справочный исходник, а не код нашего репозитория — его **не
@@ -69,7 +74,7 @@ OneScriptJS/
 ├── src/
 │   ├── index.ts            ← точка входа библиотеки (Node / бандлеры)
 │   ├── browser/
-│   │   └── onescript.ts  ← браузерная точка входа (<one-script>)
+│   │   └── onescript.ts  ← браузерная точка входа (<script type="text/osjs">)
 │   ├── node/
 │   │   └── lsp-server.ts ← stdio-точка входа LSP-сервера
 │   └── lsp/                ← инструменты .osjs: анализ, диагностика, подсказки

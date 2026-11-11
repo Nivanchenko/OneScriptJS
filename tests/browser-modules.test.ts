@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Window } from 'happy-dom';
+import { flush, makeScriptBlock, renderPage, runEngine } from './helpers/browser-script';
 
 interface Rendered {
   logs: unknown[];
@@ -7,40 +7,24 @@ interface Rendered {
   fetchMock: ReturnType<typeof vi.fn>;
 }
 
-/** Поднимает happy-dom-страницу, подставляет fetch и исполняет <one-script>. */
-async function render(
-  html: string,
-  files: Record<string, string>,
-  options: { url?: string; status?: number } = {},
-): Promise<Rendered> {
-  vi.resetModules();
-  const window = new Window({ url: options.url ?? 'http://localhost/app/' });
-  vi.stubGlobal('window', window);
-  vi.stubGlobal('document', window.document);
-  vi.stubGlobal('customElements', window.customElements);
-  vi.stubGlobal('HTMLElement', window.HTMLElement);
-  vi.stubGlobal('URL', window.URL);
-
+/** Поднимает happy-dom-страницу, подставляет fetch и исполняет script-блок. */
+async function render(source: string, files: Record<string, string>): Promise<Rendered> {
   const logs: unknown[] = [];
   const errors: unknown[] = [];
   vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => logs.push(...args));
   vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => errors.push(...args));
 
+  const window = renderPage([makeScriptBlock(source)]);
+
   const fetchMock = vi.fn(async (url: string) => {
-    if (options.status !== undefined && options.status !== 200) {
-      return new window.Response('', { status: options.status });
-    }
     const text = files[decodeURI(url)];
     if (text === undefined) return new window.Response('', { status: 404 });
     return new window.Response(text, { status: 200 });
   });
   vi.stubGlobal('fetch', fetchMock);
 
-  await import('../src/browser/onescript');
-  const element = document.createElement('one-script');
-  element.textContent = html;
-  document.body.appendChild(element);
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await runEngine();
+  await flush(20);
   return { logs, errors, fetchMock };
 }
 

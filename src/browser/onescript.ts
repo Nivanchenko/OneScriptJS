@@ -1,6 +1,7 @@
 /**
- * Браузерная точка входа. Регистрирует кастомный элемент <one-script>,
- * который выполняет BSL-код из своего содержимого.
+ * Браузерная точка входа. Исполняет BSL из HTML data blocks
+ * `<script type="text/osjs">`: содержимое такого блока — raw text, поэтому
+ * `<`, `>` и `&` не требуют HTML-экранирования.
  *
  * Вывод `Сообщить()` идёт через стандартную библиотеку в `console.log`.
  * Дополнительно регистрируется объект `Документ` для работы с DOM.
@@ -11,55 +12,66 @@ import { preloadModuleSources, resolveUrlPath } from './module-source';
 import { createBrowserGlobalContext } from './context';
 import { registerScriptContext, scheduleDeclarativeBinding } from './dom-events';
 
-const ONE_SCRIPT_TAG = 'one-script';
+const BLOCK_TYPE = 'text/osjs';
+let started = false;
 
-/** Исходник `<one-script>` не должен отображаться на странице. */
-function injectHiddenStyle(): void {
-  const doc = (globalThis as { document?: Document }).document;
-  if (!doc || doc.getElementById('one-script-style')) return;
-  const style = doc.createElement('style');
-  style.id = 'one-script-style';
-  style.textContent = 'one-script { display: none; }';
-  (doc.head ?? doc.documentElement).appendChild(style);
+/** Наш блок — `script[type="text/osjs"]`; тип сравнивается без учёта регистра. */
+function isOsjsBlock(element: Element): element is HTMLScriptElement {
+  return (
+    element.tagName === 'SCRIPT' &&
+    (element.getAttribute('type') ?? '').toLowerCase() === BLOCK_TYPE
+  );
 }
 
-class OneScriptElement extends HTMLElement {
-  private executed = false;
+/** Статические блоки в порядке документа на момент старта. */
+function collectBlocks(doc: Document): HTMLScriptElement[] {
+  return Array.from(doc.querySelectorAll('script[type]')).filter(isOsjsBlock);
+}
 
-  connectedCallback(): void {
-    // При разборе страницы connectedCallback срабатывает, когда элемент ещё пуст:
-    // текст-исходник появляется в DOM только после открывающего тега. Поэтому при
-    // `readyState === 'loading'` дожидаемся конца разбора, иначе — микротаски.
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => this.execute(), { once: true });
-      return;
-    }
-    queueMicrotask(() => this.execute());
-  }
+/**
+ * Ошибка разбора/лексера приходит с позицией. Если блок оборван на `</script>`,
+ * движок видит только обрезанный текст — подсказываем безопасную запись.
+ */
+function describeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return /строка \d+,\s*колонка/i.test(message)
+    ? `${message} (если блок оборван на </script>, соберите строку конкатенацией)`
+    : message;
+}
 
-  private execute(): void {
-    if (this.executed || !this.isConnected) return;
-    this.executed = true;
+/** Свежий контекст на блок; ошибка блока уходит в `console.error`, не прерывая остальные. */
+async function executeBlock(block: HTMLScriptElement): Promise<void> {
+  const doc = block.ownerDocument;
+  const source = block.textContent ?? '';
+  try {
     const ctx = createBrowserGlobalContext();
-    // Контекст нужен декларативным обработчикам (`data-os-*`) в этом <one-script>.
-    registerScriptContext(this.id || null, ctx);
-    const source = this.textContent ?? '';
-    const baseUrl = document.baseURI;
-
-    void preloadModuleSources(source, baseUrl)
-      .then((modules) =>
-        Promise.resolve(run(source, ctx, { basePath: baseUrl, modules, resolve: resolveUrlPath })).then(
-          () => scheduleDeclarativeBinding(),
-        ),
-      )
-      .catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : String(error));
-      });
+    // Контекст нужен декларативным обработчикам (`data-os-*`) в этом блоке.
+    registerScriptContext(block.id || null, ctx);
+    const modules = await preloadModuleSources(source, doc.baseURI);
+    await run(source, ctx, { basePath: doc.baseURI, modules, resolve: resolveUrlPath });
+    scheduleDeclarativeBinding();
+  } catch (error) {
+    console.error(describeError(error));
   }
 }
 
-injectHiddenStyle();
-
-if (!customElements.get(ONE_SCRIPT_TAG)) {
-  customElements.define(ONE_SCRIPT_TAG, OneScriptElement);
+/** Последовательный `await` сохраняет порядок документа даже при асинхронной предзагрузке. */
+async function runAll(doc: Document): Promise<void> {
+  for (const block of collectBlocks(doc)) {
+    await executeBlock(block);
+  }
 }
+
+/** Один запуск на документ: сразу, если DOM уже готов, иначе — на `DOMContentLoaded`. */
+function start(): void {
+  const doc = (globalThis as { document?: Document }).document;
+  if (!doc || started) return;
+  started = true;
+  if (doc.readyState === 'loading') {
+    doc.addEventListener('DOMContentLoaded', () => void runAll(doc), { once: true });
+  } else {
+    void runAll(doc);
+  }
+}
+
+start();

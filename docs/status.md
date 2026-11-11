@@ -24,8 +24,8 @@
 (`values`, `scope`+`Ref`, `context`, `async` (MaybePromise/`drive`/кванты), `interpreter`
 на генераторах с синхронным быстрым путём, `enum`, `object`, `type`, `error-info`,
 `runner`) → `src/stdlib` (global-context, collections, strings, math, bitwise, json,
-types, enums, format, tasks/фоновые задания) → `src/browser/onescript.ts` (`<one-script>`)
-и `src/node/` (cli, context, files) → `src/testing` (xUnit-раннер).
+types, enums, format, tasks/фоновые задания) → `src/browser/onescript.ts`
+(`script[type="text/osjs"]`) и `src/node/` (cli, context, files) → `src/testing` (xUnit-раннер).
 
 Сборка: `dist/onescript.js` (браузер, IIFE), `dist/node/index.{js,cjs,d.ts}` (библиотека),
 `dist/cli.mjs` (CLI).
@@ -123,10 +123,10 @@ types, enums, format, tasks/фоновые задания) → `src/browser/ones
 | `013-osjs-format` | Формат `.osjs` — отделение от ванильного OneScript; `.os` — чужой формат, не блокируется | реализовано |
 | `014-osjs-editor-tooling` | Редакторные инструменты `.osjs`: грамматика/описание языка и LSP-сервер (диагностика, подсказки, semantic tokens, навигация); расширение VS Code — позже | реализовано |
 | `015-embedded-osjs-html` | Встроенный `.osjs` в HTML: редакторные инструменты внутри `<script type="text/osjs">` («гость в HTML»); зависит от 014, 016 и клиента VS Code | spec |
-| `016-osjs-script-tag` | Каноническая форма встраивания — `<script type="text/osjs">` вместо `<one-script>`; удаление старой формы, raw-text семантика, диагностика `</script>` (OSJS4001) | spec |
+| `016-osjs-script-tag` | Каноническая форма встраивания — `<script type="text/osjs">`; удаление прежней формы, raw-text семантика, диагностика `</script>` (OSJS4001) | реализовано (runtime + тесты + миграция; правила OSJS4001/4002 — в 015) |
 
 Для незавершённых спек следующий шаг — `/speckit-plan` или `/speckit-tasks` в её каталоге;
-реализованы 001, 008, 009, 010, 011, 012, 013 и 014.
+реализованы 001, 008, 009, 010, 011, 012, 013, 014 и 016.
 
 **Редакторные инструменты для `.osjs`** реализованы по спеке
 [`specs/014-osjs-editor-tooling/spec.md`](../specs/014-osjs-editor-tooling/spec.md):
@@ -145,16 +145,28 @@ in-process и smoke собранного сервера) и `pnpm build`; **ру
 и outline (`documentSymbol`: регионы `#Область` с методами) подтверждены. Браузерная приёмка к инструментам неприменима:
 они не исполняют BSL и не входят в `dist/onescript.js` (конституция V).
 
-Следующая будущая работа — **встроенный `.osjs` в HTML**. Владелец выбрал каноническую
-форму `<script type="text/osjs">` и отказался от `<one-script>` (пользователей нет):
-[`specs/016-osjs-script-tag/spec.md`](../specs/016-osjs-script-tag/spec.md) (Draft; runtime-
-переход, raw-text семантика, диагностика `</script>` как Error). Редакторные инструменты —
+**Каноническая форма встраивания** — `<script type="text/osjs">`: реализовано по спеке
+[`specs/016-osjs-script-tag/spec.md`](../specs/016-osjs-script-tag/spec.md). Прежний
+кастомный элемент удалён (пользователей не было, обратная совместимость не требуется):
+браузерный вход собирает data blocks `script[type="text/osjs"]` в порядке документа и
+исполняет их последовательно в свежих контекстах; содержимое — raw text (`<`, `>`, `&`
+без экранирования; `</script>` обрывает блок); конституция поправлена до 3.0.0 (принцип II).
+Проверка: `pnpm build && pnpm test` (728 тестов, включая новый `browser-script-tag` и
+мигрированные browser-suite'ы, а также демо-страницы `examples/`).
+
+Следующая работа — **редакторные инструменты для встроенных блоков HTML**:
 [`specs/015-embedded-osjs-html/spec.md`](../specs/015-embedded-osjs-html/spec.md) (Draft;
-зависит от 016 и тонкого клиента VS Code): модель «гость в HTML» — подсветка/диагностика/
-подсказки/токены/переходы только внутри script-блоков, `.html` остаётся у HTML-инструментов.
-План и задачи не начаты.
+зависит от 016 и тонкого клиента VS Code). Модель «гость в HTML»: подсветка/диагностика/
+подсказки/токены/переходы только внутри script-блоков, `.html` остаётся у HTML-инструментов;
+правила `OSJS4001` (Error для `</script>`) и `OSJS4002` (Warning для `<script`/`<!--`) —
+контракт 016, реализация в 015. План и задачи 015 не начаты.
 
 ## Известные пробелы
+- Встроенные блоки (спека 016): поведение data blocks под строгим CSP в реальном браузере не
+  проверялось; happy-dom эмулирует `DOMContentLoaded`/`readyState` (в тестах — 'interactive');
+  динамически добавленные блоки и `src` не поддерживаются по решению владельца (v1);
+  диагностика `</script>` (OSJS4001) и `<script`/`<!--` (OSJS4002) — контракт, реализация — в
+  спеке 015 (не начата).
 - LSP-инструменты (спека 014): ручная проверка выполнена в Neovim 0.12.2 — подсветка,
   диагностика, completion, hover, `definition` (локальный метод и импортированный
   `.osjs`), outline (`documentSymbol`) подтверждены; не проверялись визуально поведение

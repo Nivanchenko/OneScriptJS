@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Window } from 'happy-dom';
+import { flush, makeScriptBlock, renderPage, runEngine } from './helpers/browser-script';
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-describe('браузер: Асинх/Ждать в <one-script>', () => {
+describe('браузер: Асинх/Ждать в script-блоке', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -14,12 +14,6 @@ describe('браузер: Асинх/Ждать в <one-script>', () => {
     errors: string[];
     restore(): void;
   }> {
-    const window = new Window();
-    vi.stubGlobal('window', window);
-    vi.stubGlobal('document', window.document);
-    vi.stubGlobal('customElements', window.customElements);
-    vi.stubGlobal('HTMLElement', window.HTMLElement);
-
     const logs: string[] = [];
     const errors: string[] = [];
     const logSpy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
@@ -28,12 +22,10 @@ describe('браузер: Асинх/Ждать в <one-script>', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
       errors.push(args.map((a) => String(a)).join(' '));
     });
-    // Каждый тест поднимает свой Window: модуль нужно выполнить заново.
-    vi.resetModules();
-    await import('../src/browser/onescript');
-    const el = document.createElement('one-script');
-    el.textContent = source;
-    document.body.appendChild(el);
+    // Каждый тест поднимает свою страницу: модуль исполняется заново и видит её блоки.
+    renderPage([makeScriptBlock(source)]);
+    await runEngine();
+    await flush();
     return {
       logs,
       errors,

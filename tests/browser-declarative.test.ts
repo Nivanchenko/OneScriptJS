@@ -3,6 +3,7 @@ import { Window } from 'happy-dom';
 import { bindDeclarativeHandlers, registerScriptContext, resetDeclarativeHandlers } from '../src/browser/dom-events';
 import { createBrowserGlobalContext } from '../src/browser/context';
 import { run } from '../src/runtime/runner';
+import { flush, makeScriptBlock, renderPage, runEngine } from './helpers/browser-script';
 
 let captured: unknown[] = [];
 
@@ -17,13 +18,11 @@ function setupWindow(html: string): Window {
   const window = new Window();
   vi.stubGlobal('window', window);
   vi.stubGlobal('document', window.document);
-  vi.stubGlobal('customElements', window.customElements);
-  vi.stubGlobal('HTMLElement', window.HTMLElement);
   window.document.body.innerHTML = html;
   return window;
 }
 
-/** Регистрирует контекст скрипта так же, как это делает <one-script>. */
+/** Регистрирует контекст скрипта так же, как это делает script-блок. */
 function addScriptContext(id: string | null, code: string): void {
   const ctx = createBrowserGlobalContext();
   registerScriptContext(id, ctx);
@@ -46,15 +45,18 @@ describe('декларативные обработчики data-os-*', () => {
     vi.restoreAllMocks();
   });
 
-  it('data-os-click исполняется в области видимости единственного <one-script>', async () => {
-    const window = setupWindow('<button id="к" data-os-click="Счёт = Счёт + 1; Вывод.Текст = Строка(Счёт);">+1</button><span id="вывод"></span>');
-    await import('../src/browser/onescript');
-    const script = window.document.createElement('one-script');
-    script.textContent =
-      'Перем Счёт; Счёт = 0; Вывод = Документ.ПолучитьЭлемент("вывод"); Вывод.Текст = "0";';
-    window.document.body.appendChild(script);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    bind(window);
+  it('data-os-click исполняется в области видимости единственного script-блока', async () => {
+    const window = renderPage(
+      [
+        makeScriptBlock(
+          'Перем Счёт; Счёт = 0; Вывод = Документ.ПолучитьЭлемент("вывод"); Вывод.Текст = "0";',
+        ),
+      ],
+      '<button id="к" data-os-click="Счёт = Счёт + 1; Вывод.Текст = Строка(Счёт);">+1</button><span id="вывод"></span>',
+    );
+    await runEngine();
+    await flush();
+    // Привязку после исполнения блока уже запланировал движок.
 
     click(window, 'к');
     click(window, 'к');
@@ -90,7 +92,7 @@ describe('декларативные обработчики data-os-*', () => {
     expect(captured).toEqual(['один', 'два']);
   });
 
-  it('без <one-script> обработчики не активируются, но страница не падает', () => {
+  it('без script-блока обработчики не активируются, но страница не падает', () => {
     const window = setupWindow('<button id="к" data-os-click="сообщить(1);">x</button>');
     capture();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

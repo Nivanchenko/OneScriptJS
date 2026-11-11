@@ -1,32 +1,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Window } from 'happy-dom';
+import { flush, makeScriptBlock, renderPage, runEngine } from './helpers/browser-script';
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-describe('браузер: фоновые задания в <one-script>', () => {
+describe('браузер: фоновые задания в script-блоке', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
   async function mount(source: string): Promise<{ logs: string[]; restore(): void }> {
-    const window = new Window();
-    vi.stubGlobal('window', window);
-    vi.stubGlobal('document', window.document);
-    vi.stubGlobal('customElements', window.customElements);
-    vi.stubGlobal('HTMLElement', window.HTMLElement);
-
     const logs: string[] = [];
     const spy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
       logs.push(args.map((a) => String(a)).join(' '));
     });
-    // Каждый тест поднимает свой Window: модуль нужно выполнить заново, чтобы
-    // <one-script> зарегистрировался в customElements этого окна.
-    vi.resetModules();
-    await import('../src/browser/onescript');
-    const el = document.createElement('one-script');
-    el.textContent = source;
-    document.body.appendChild(el);
+    // Каждый тест поднимает свою страницу: модуль исполняется заново и видит её блоки.
+    renderPage([makeScriptBlock(source)]);
+    await runEngine();
+    await flush();
     return { logs, restore: () => spy.mockRestore() };
   }
 

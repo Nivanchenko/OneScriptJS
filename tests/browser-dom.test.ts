@@ -3,6 +3,7 @@ import { Window } from 'happy-dom';
 import { run } from '../src/runtime/runner';
 import { createBrowserGlobalContext } from '../src/browser/context';
 import { createGlobalContext } from '../src/stdlib/global-context';
+import { flush, makeScriptBlock, renderPage, runEngine } from './helpers/browser-script';
 
 function exec(source: string): unknown[] {
   const logs: unknown[] = [];
@@ -101,25 +102,21 @@ describe('Документ (DOM): создание и изменение эле�
   });
 });
 
-describe('Документ доступен из <one-script>', () => {
+describe('Документ доступен из <script type="text/osjs">', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
-  it('код из <one-script> создаёт элемент в body', async () => {
-    const window = new Window();
-    vi.stubGlobal('window', window);
-    vi.stubGlobal('document', window.document);
-    vi.stubGlobal('customElements', window.customElements);
-    vi.stubGlobal('HTMLElement', window.HTMLElement);
+  it('код из блока создаёт элемент в body', async () => {
+    const window = renderPage([
+      makeScriptBlock(
+        'Э = Документ.СоздатьЭлемент("h1"); Э.Текст = "Заголовок"; Э.ДобавитьВ(Документ.ТелоКорпуса);',
+      ),
+    ]);
 
-    await import('../src/browser/onescript');
-
-    const el = document.createElement('one-script');
-    el.textContent = 'Э = Документ.СоздатьЭлемент("h1"); Э.Текст = "Заголовок"; Э.ДобавитьВ(Документ.ТелоКорпуса);';
-    document.body.appendChild(el);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await runEngine();
+    await flush();
 
     const h1 = window.document.body.querySelector('h1');
     expect(h1?.textContent).toBe('Заголовок');

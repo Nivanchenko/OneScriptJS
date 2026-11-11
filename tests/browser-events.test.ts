@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Window } from 'happy-dom';
 import { run } from '../src/runtime/runner';
 import { createBrowserGlobalContext } from '../src/browser/context';
+import { flush, makeScriptBlock, renderPage, runEngine } from './helpers/browser-script';
 
 let captured: unknown[] = [];
 
@@ -164,33 +165,29 @@ describe('события DOM из BSL', () => {
   });
 });
 
-describe('<one-script>: подписка на события из разметки', () => {
+describe('<script type="text/osjs">: подписка на события из разметки', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
-  it('кнопка из <one-script> увеличивает счётчик и пишет в DOM', async () => {
-    const window = new Window();
-    vi.stubGlobal('window', window);
-    vi.stubGlobal('document', window.document);
-    vi.stubGlobal('customElements', window.customElements);
-    vi.stubGlobal('HTMLElement', window.HTMLElement);
-    window.document.body.innerHTML = '<button id="к">+1</button><span id="счёт"></span>';
+  it('кнопка из блока увеличивает счётчик и пишет в DOM', async () => {
+    const window = renderPage(
+      [
+        makeScriptBlock(`
+          Перем Счёт;
+          Счёт = 0;
+          Кнопка = Документ.ПолучитьЭлемент("к");
+          Вывод = Документ.ПолучитьЭлемент("счёт");
+          Вывод.Текст = "0";
+          Кнопка.НаСобытие("Нажатие", "Счёт = Счёт + 1; Вывод.Текст = Строка(Счёт);");
+        `),
+      ],
+      '<button id="к">+1</button><span id="счёт"></span>',
+    );
 
-    await import('../src/browser/onescript');
-
-    const el = window.document.createElement('one-script');
-    el.textContent = `
-      Перем Счёт;
-      Счёт = 0;
-      Кнопка = Документ.ПолучитьЭлемент("к");
-      Вывод = Документ.ПолучитьЭлемент("счёт");
-      Вывод.Текст = "0";
-      Кнопка.НаСобытие("Нажатие", "Счёт = Счёт + 1; Вывод.Текст = Строка(Счёт);");
-    `;
-    window.document.body.appendChild(el);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await runEngine();
+    await flush();
 
     (window.document.getElementById('к') as unknown as HTMLElement).click();
     (window.document.getElementById('к') as unknown as HTMLElement).click();
@@ -199,46 +196,37 @@ describe('<one-script>: подписка на события из разметк
   });
 });
 
-describe('<one-script>: события BSL', () => {
+describe('<script type="text/osjs">: события BSL', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
   it('ДобавитьОбработчик и объявление события доходят до console.log', async () => {
-    const window = new Window();
-    vi.stubGlobal('window', window);
-    vi.stubGlobal('document', window.document);
-    vi.stubGlobal('customElements', window.customElements);
-    vi.stubGlobal('HTMLElement', window.HTMLElement);
-    window.document.body.innerHTML = '';
-
-    // Модуль кешируется между тестами: перезагружаем, чтобы элемент зарегистрировался в этом Window.
-    vi.resetModules();
-    await import('../src/browser/onescript');
+    renderPage([
+      makeScriptBlock(`
+        Перем Счетчик;
+        Процедура Обработчик(П1, П2) Экспорт
+          Счетчик = Счетчик + 1;
+          Сообщить(П1);
+          Сообщить(П2);
+          Сообщить(Счетчик);
+        КонецПроцедуры
+        Источник = ЗагрузитьСценарийИзСтроки("Процедура Сгенерировать(Имя, Параметры) Экспорт
+        |  ВызватьСобытие(Имя, Параметры);
+        |КонецПроцедуры");
+        Счетчик = 0;
+        ДобавитьОбработчик Источник.МоеСобытие, ЭтотОбъект.Обработчик;
+        Параметры = Новый Массив;
+        Параметры.Добавить("П1");
+        Параметры.Добавить("П2");
+        Источник.Сгенерировать("МоеСобытие", Параметры);
+      `),
+    ]);
 
     capture();
-    const el = window.document.createElement('one-script');
-    el.textContent = `
-      Перем Счетчик;
-      Процедура Обработчик(П1, П2) Экспорт
-        Счетчик = Счетчик + 1;
-        Сообщить(П1);
-        Сообщить(П2);
-        Сообщить(Счетчик);
-      КонецПроцедуры
-      Источник = ЗагрузитьСценарийИзСтроки("Процедура Сгенерировать(Имя, Параметры) Экспорт
-      |  ВызватьСобытие(Имя, Параметры);
-      |КонецПроцедуры");
-      Счетчик = 0;
-      ДобавитьОбработчик Источник.МоеСобытие, ЭтотОбъект.Обработчик;
-      Параметры = Новый Массив;
-      Параметры.Добавить("П1");
-      Параметры.Добавить("П2");
-      Источник.Сгенерировать("МоеСобытие", Параметры);
-    `;
-    window.document.body.appendChild(el);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await runEngine();
+    await flush();
 
     expect(captured).toEqual(['П1', 'П2', '1']);
   });
