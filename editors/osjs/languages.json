@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "languages": [
+    {
+      "id": "osjs",
+      "aliases": ["OneScriptJS", "OSJS"],
+      "extensions": [".osjs"],
+      "filenames": [],
+      "scopeName": "source.osjs",
+      "grammar": "osjs.tmLanguage.json",
+      "configuration": "language-configuration.json"
+    }
+  ]
+}

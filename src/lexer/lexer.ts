@@ -1,5 +1,5 @@
 import { TokenType } from './token';
-import type { LiteralValue, Token } from './token';
+import type { LexerDiagnostic, LiteralValue, Token } from './token';
 
 // Спец-литералы распознаются регистронезависимо (как в 1С/BSL).
 const BOOLEAN_TRUE = new Set(['истина', 'true']);
@@ -17,13 +17,33 @@ const OPERATOR_CHARS = new Set([
   '(', ')', ',', '.', '[', ']', '?', '~', '&', ':',
 ]);
 
+export interface TokenizeOptions {
+  /** Эмитировать `//`-комментарии токенами `Comment` (для semantic tokens). */
+  includeTrivia?: boolean;
+}
+
+export interface TokenizeResult {
+  tokens: Token[];
+  errors: LexerDiagnostic[];
+}
+
 /**
  * Преобразует исходник BSL в поток токенов.
  * Ключевые слова (`если`, `тогда`, `цикл` и т.п.) остаются Identifier —
  * их распознаёт парсер. Комментарии `//` пропускаются.
  */
-export function tokenize(source: string): Token[] {
+export function tokenize(source: string, options: TokenizeOptions = {}): Token[] {
+  return scan(source, options, false).tokens;
+}
+
+/** То же, что `tokenize`, но ошибки собираются и разбор продолжается. */
+export function tokenizeTolerant(source: string, options: TokenizeOptions = {}): TokenizeResult {
+  return scan(source, options, true);
+}
+
+function scan(source: string, options: TokenizeOptions, tolerant: boolean): TokenizeResult {
   const tokens: Token[] = [];
+  const errors: LexerDiagnostic[] = [];
   let offset = 0;
   let line = 1;
   let column = 1;
@@ -41,6 +61,18 @@ export function tokenize(source: string): Token[] {
     return ch;
   };
 
+  // Диапазон ошибки — от начала проблемной лексемы до текущей позиции.
+  const fail = (message: string, startLine: number, startColumn: number): void => {
+    if (!tolerant) throw new Error(`${message}: строка ${startLine}, колонка ${startColumn}`);
+    errors.push({ message, line: startLine, column: startColumn, endLine: line, endColumn: column });
+  };
+  const failUnexpected = (message: string, startLine: number, startColumn: number): void => {
+    if (!tolerant) {
+      throw new Error(`${message} на строке ${startLine}, колонке ${startColumn}`);
+    }
+    errors.push({ message, line: startLine, column: startColumn, endLine: line, endColumn: column });
+  };
+
   while (offset < source.length) {
     const startOffset = offset;
     const startLine = line;
@@ -52,6 +84,8 @@ export function tokenize(source: string): Token[] {
         value,
         line: startLine,
         column: startColumn,
+        endLine: line,
+        endColumn: column,
       });
     };
 
@@ -63,7 +97,15 @@ export function tokenize(source: string): Token[] {
     }
 
     if (ch === '/' && peek(1) === '/') {
-      while (offset < source.length && peek() !== '\n') advance();
+      // CRLF не входит в Comment: LSP-диапазон не должен пересекать перевод строки.
+      while (
+        offset < source.length &&
+        peek() !== '\n' &&
+        !(peek() === '\r' && peek(1) === '\n')
+      ) {
+        advance();
+      }
+      if (options.includeTrivia) emit(TokenType.Comment);
       continue;
     }
 
@@ -79,7 +121,8 @@ export function tokenize(source: string): Token[] {
       let value = '';
       for (;;) {
         if (offset >= source.length) {
-          throw new Error(`Незакрытый строковый литерал: строка ${startLine}, колонка ${startColumn}`);
+          fail('Незакрытый строковый литерал', startLine, startColumn);
+          break;
         }
         if (peek() === '"') {
           if (peek(1) === '"') {
@@ -123,7 +166,9 @@ export function tokenize(source: string): Token[] {
       let value = '';
       while (offset < source.length && peek() !== "'") value += advance();
       if (offset >= source.length) {
-        throw new Error(`Незакрытый литерал даты: строка ${startLine}, колонка ${startColumn}`);
+        fail('Незакрытый литерал даты', startLine, startColumn);
+        emit(TokenType.Date, value);
+        continue;
       }
       advance();
       emit(TokenType.Date, value);
@@ -171,9 +216,10 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    throw new Error(`Неожиданный символ '${ch}' на строке ${startLine}, колонке ${startColumn}`);
+    advance();
+    failUnexpected(`Неожиданный символ '${ch}'`, startLine, startColumn);
   }
 
-  tokens.push({ type: TokenType.EndOfFile, lexeme: '', line, column });
-  return tokens;
+  tokens.push({ type: TokenType.EndOfFile, lexeme: '', line, column, endLine: line, endColumn: column });
+  return { tokens, errors };
 }

@@ -2,62 +2,73 @@ import { TokenType } from '../lexer/token';
 import type { Token } from '../lexer/token';
 import type { Expression, IfStatement, LValue, MethodParameter, Pos, Program, Statement } from '../ast/nodes';
 
-// Ключевые слова распознаются регистронезависимо (RU/EN).
-const KW_IF = new Set(['если', 'if']);
-const KW_THEN = new Set(['тогда', 'then']);
-const KW_ENDIF = new Set(['конецесли', 'endif']);
-const KW_ELSIF = new Set(['иначеесли', 'elsif']);
-const KW_ELSE = new Set(['иначе', 'else']);
-const KW_AND = new Set(['и', 'and']);
-const KW_OR = new Set(['или', 'or']);
-const KW_NOT = new Set(['не', 'not']);
-const KW_PROCEDURE = new Set(['процедура', 'procedure']);
-const KW_FUNCTION = new Set(['функция', 'function']);
-const KW_ENDPROCEDURE = new Set(['конецпроцедуры', 'endprocedure']);
-const KW_ENDFUNCTION = new Set(['конецфункции', 'endfunction']);
-const KW_RETURN = new Set(['возврат', 'return']);
-const KW_VAR = new Set(['перем', 'var']);
-const KW_EXPORT = new Set(['экспорт', 'export']);
-const KW_VALUE = new Set(['знач', 'val']);
-const KW_FOR = new Set(['для', 'for']);
-const KW_EACH = new Set(['каждого', 'each']);
-const KW_IN = new Set(['из', 'in']);
-const KW_TO = new Set(['по', 'to']);
-const KW_WHILE = new Set(['пока', 'while']);
-const KW_LOOP = new Set(['цикл', 'do']);
-const KW_ENDLOOP = new Set(['конеццикла', 'enddo']);
-const KW_BREAK = new Set(['прервать', 'break']);
-const KW_CONTINUE = new Set(['продолжить', 'continue']);
-const KW_TRY = new Set(['попытка', 'try']);
-const KW_EXCEPT = new Set(['исключение', 'except']);
-const KW_ENDTRY = new Set(['конецпопытки', 'endtry']);
-const KW_RAISE = new Set(['вызватьисключение', 'raise']);
-const KW_NEW = new Set(['новый', 'new']);
-const KW_GOTO = new Set(['перейти', 'goto']);
-const KW_EXECUTE = new Set(['выполнить', 'execute']);
-const KW_ADD_HANDLER = new Set(['добавитьобработчик', 'addhandler']);
-const KW_REMOVE_HANDLER = new Set(['удалитьобработчик', 'removehandler']);
-const KW_ASYNC = new Set(['асинх', 'async']);
-const KW_AWAIT = new Set(['ждать', 'await']);
+import {
+  COMPARISON_OPS,
+  END_OF_BLOCK,
+  KW_ADD_HANDLER,
+  KW_AND,
+  KW_ASYNC,
+  KW_AWAIT,
+  KW_BREAK,
+  KW_CONTINUE,
+  KW_EACH,
+  KW_ELSE,
+  KW_ELSIF,
+  KW_ENDIF,
+  KW_ENDFUNCTION,
+  KW_ENDLOOP,
+  KW_ENDPROCEDURE,
+  KW_ENDTRY,
+  KW_EXCEPT,
+  KW_EXECUTE,
+  KW_EXPORT,
+  KW_FOR,
+  KW_FUNCTION,
+  KW_GOTO,
+  KW_IF,
+  KW_IN,
+  KW_LOOP,
+  KW_NEW,
+  KW_NOT,
+  KW_OR,
+  KW_PROCEDURE,
+  KW_RAISE,
+  KW_REMOVE_HANDLER,
+  KW_RETURN,
+  KW_THEN,
+  KW_TO,
+  KW_TRY,
+  KW_VALUE,
+  KW_VAR,
+  KW_WHILE,
+} from './keywords';
 
-// Ключевые слова конца блока: завершают оператор без ';'.
-const END_OF_BLOCK = new Set([
-  'конецесли', 'endif',
-  'конецпроцедуры', 'endprocedure',
-  'конецфункции', 'endfunction',
-  'иначе', 'else',
-  'иначеесли', 'elsif',
-  'конеццикла', 'enddo',
-  'конецпопытки', 'endtry',
-  'исключение', 'except',
-]);
+/** Ошибка разбора с диапазоном; при толерантном разборе не прерывает анализ. */
+export interface ParseDiagnostic {
+  readonly message: string;
+  readonly line: number;
+  readonly column: number;
+  readonly endLine: number;
+  readonly endColumn: number;
+}
 
-const COMPARISON_OPS = new Set(['=', '<>', '<', '>', '<=', '>=']);
+export interface ParseTolerantResult {
+  program: Program;
+  errors: ParseDiagnostic[];
+}
 
-/** Строит AST из потока токенов лексера. */
+/** Строит AST из потока токенов лексера. Бросает на первой ошибке. */
 export function parse(tokens: Token[]): Program {
   return new Parser(tokens).parse();
 }
+
+/** Собирает несколько ошибок с диапазонами и отдаёт частичный AST. */
+export function parseTolerant(tokens: Token[]): ParseTolerantResult {
+  return new Parser(tokens).parseTolerant();
+}
+
+/** Внутренний сигнал раскрутки до ближайшей точки восстановления. */
+class RecoverableParseError extends Error {}
 
 function isLValue(expr: Expression): expr is LValue {
   return expr.kind === 'Identifier' || expr.kind === 'MemberExpression' || expr.kind === 'IndexExpression';
@@ -72,6 +83,9 @@ class Parser {
   private inAsync = false;
   private loopDepth = 0;
   private exceptDepth = 0;
+  /** Толерантный режим: ошибки копятся в `diagnostics`, а не бросаются наружу. */
+  private tolerant = false;
+  private readonly diagnostics: ParseDiagnostic[] = [];
 
   constructor(private readonly tokens: Token[]) {
     this.eof = tokens[tokens.length - 1]!;
@@ -110,12 +124,84 @@ class Parser {
     return { kind: 'Program', pos: this.posOf(start), body };
   }
 
+  /**
+   * Паник-режим: ошибки не прерывают модуль, а операторы/секции восстанавливаются
+   * на `;`, закрывающем ключевом слове или начале метода.
+   */
+  parseTolerant(): ParseTolerantResult {
+    this.tolerant = true;
+    const start = this.peek();
+    const body: Statement[] = [];
+
+    this.skipModuleSeparators();
+    while (this.isKeyword(KW_VAR)) {
+      this.attempt(() => body.push(this.parseVariableDeclaration()));
+      this.skipModuleSeparators();
+    }
+
+    while (this.isMethodStart()) {
+      this.attemptMethod(body);
+      this.skipModuleSeparators();
+    }
+
+    while (!this.isEnd()) {
+      if (this.isKeyword(KW_VAR)) {
+        this.report(
+          'объявления переменных должны быть расположены в начале модуля, процедуры или функции',
+        );
+        this.attempt(() => body.push(this.parseVariableDeclaration()));
+        this.skipModuleSeparators();
+        continue;
+      }
+      if (this.isMethodStart()) {
+        this.report('объявление метода должно быть расположено до исполняемого кода');
+        this.attemptMethod(body);
+        this.skipModuleSeparators();
+        continue;
+      }
+      this.attempt(() => body.push(this.parseStatement()));
+      this.skipModuleSeparators();
+    }
+
+    return {
+      program: { kind: 'Program', pos: this.posOf(start), body },
+      errors: this.diagnostics,
+    };
+  }
+
+  /** Разбирает оператор; в толерантном режиме ошибка не выходит из цикла. */
+  private attempt(parse: () => void): void {
+    const from = this.current;
+    try {
+      parse();
+    } catch (error) {
+      if (!(error instanceof RecoverableParseError)) throw error;
+      this.recoverStatement(from);
+    }
+  }
+
+  private attemptMethod(body: Statement[]): void {
+    const from = this.current;
+    try {
+      body.push(this.parseMethod());
+    } catch (error) {
+      if (!(error instanceof RecoverableParseError)) throw error;
+      this.recoverMethod(from);
+    }
+  }
+
   /** Пропускает `;`, пустые операторы и аннотации между секциями модуля. */
   private skipModuleSeparators(): void {
     for (;;) {
       if (this.matchEndOfStatement()) continue;
       if (this.checkOp('&')) {
-        this.skipAnnotation();
+        const from = this.current;
+        try {
+          this.skipAnnotation();
+        } catch (error) {
+          if (!(error instanceof RecoverableParseError)) throw error;
+          this.recoverStatement(from);
+        }
         continue;
       }
       break;
@@ -193,7 +279,7 @@ class Parser {
   private parseStatementsUntil(...stops: Set<string>[]): Statement[] {
     const body: Statement[] = [];
     while (!this.isEnd() && !stops.some((s) => this.isKeyword(s))) {
-      body.push(this.parseStatement());
+      this.attempt(() => body.push(this.parseStatement()));
     }
     return body;
   }
@@ -207,43 +293,49 @@ class Parser {
     const previousAsync = this.inAsync;
     this.methodKind = isFunction ? 'function' : 'procedure';
     this.inAsync = isAsync;
-    const name = this.expectIdentifier();
-    if (isAsync && ['присозданииобъекта', 'onobjectcreate'].includes(name.lexeme.toLowerCase())) {
-      this.error('Асинхронный конструктор не поддерживается');
-    }
-    this.expectOp('(');
-    const params: MethodParameter[] = [];
-    if (!this.checkOp(')')) {
-      do {
-        params.push(this.parseParameter());
-      } while (this.matchOp(','));
-    }
-    this.expectOp(')');
-    const exported = this.matchKeyword(KW_EXPORT);
-    const endKw = isFunction ? KW_ENDFUNCTION : KW_ENDPROCEDURE;
+    // try/finally — состояние контекста не должно утекать в следующий метод при ошибке.
+    try {
+      const name = this.expectIdentifier();
+      if (isAsync && ['присозданииобъекта', 'onobjectcreate'].includes(name.lexeme.toLowerCase())) {
+        this.error('Асинхронный конструктор не поддерживается');
+      }
+      this.expectOp('(');
+      const params: MethodParameter[] = [];
+      if (!this.checkOp(')')) {
+        do {
+          params.push(this.parseParameter());
+        } while (this.matchOp(','));
+      }
+      this.expectOp(')');
+      const exported = this.matchKeyword(KW_EXPORT);
+      const endKw = isFunction ? KW_ENDFUNCTION : KW_ENDPROCEDURE;
 
-    const body: Statement[] = [];
-    this.skipModuleSeparators();
-    while (this.isKeyword(KW_VAR)) {
-      body.push(this.parseVariableDeclaration());
+      const body: Statement[] = [];
       this.skipModuleSeparators();
-    }
-    while (!this.isEnd() && !this.isKeyword(endKw)) body.push(this.parseStatement());
+      while (this.isKeyword(KW_VAR)) {
+        this.attempt(() => body.push(this.parseVariableDeclaration()));
+        this.skipModuleSeparators();
+      }
+      while (!this.isEnd() && !this.isKeyword(endKw)) {
+        this.attempt(() => body.push(this.parseStatement()));
+      }
 
-    this.expectKeyword(endKw);
-    this.matchEndOfStatement();
-    this.methodKind = previousMethod;
-    this.inAsync = previousAsync;
-    return {
-      kind: 'MethodDeclaration',
-      pos: this.posOf(asyncToken ?? start),
-      name: name.lexeme,
-      isFunction,
-      isAsync,
-      exported,
-      params,
-      body,
-    };
+      this.expectKeyword(endKw);
+      this.matchEndOfStatement();
+      return {
+        kind: 'MethodDeclaration',
+        pos: this.posOf(asyncToken ?? start),
+        name: name.lexeme,
+        isFunction,
+        isAsync,
+        exported,
+        params,
+        body,
+      };
+    } finally {
+      this.methodKind = previousMethod;
+      this.inAsync = previousAsync;
+    }
   }
 
   private parseParameter(): MethodParameter {
@@ -426,7 +518,9 @@ class Parser {
     const body: Statement[] = [];
     this.loopDepth += 1;
     try {
-      while (!this.isEnd() && !this.isKeyword(KW_ENDLOOP)) body.push(this.parseStatement());
+      while (!this.isEnd() && !this.isKeyword(KW_ENDLOOP)) {
+        this.attempt(() => body.push(this.parseStatement()));
+      }
     } finally {
       this.loopDepth -= 1;
     }
@@ -821,6 +915,58 @@ class Parser {
     return t.type === TokenType.Identifier && END_OF_BLOCK.has(t.lexeme.toLowerCase());
   }
 
+  /** Записывает диагностику без исключения (толерантный режим). */
+  private report(message: string): void {
+    const t = this.peek();
+    this.diagnostics.push({
+      message,
+      line: t.line,
+      column: t.column,
+      endLine: t.endLine,
+      endColumn: t.endColumn,
+    });
+  }
+
+  /** Паник-восстановление оператора: до `;`, закрывающего блока, начала метода или EOF. */
+  private recoverStatement(from: number): void {
+    // Ошибка на первом токене оператора: без сдвига цикл разбора не завершится.
+    if (this.current === from) this.advanceRecovery();
+    while (!this.isEnd()) {
+      if (this.peek().type === TokenType.EndOfStatement) {
+        this.advanceRecovery();
+        return;
+      }
+      if (this.atBlockBoundary()) return;
+      this.advanceRecovery();
+    }
+  }
+
+  /** Восстановление объявления метода: пропускает его закрывающее ключевое слово. */
+  private recoverMethod(from: number): void {
+    this.recoverStatement(from);
+    if (this.isKeyword(KW_ENDPROCEDURE) || this.isKeyword(KW_ENDFUNCTION)) {
+      this.advanceRecovery();
+      this.matchEndOfStatement();
+    }
+  }
+
+  private atBlockBoundary(): boolean {
+    if (this.isEnd()) return true;
+    if (this.peek().type !== TokenType.Identifier) return false;
+    const lower = this.peek().lexeme.toLowerCase();
+    return (
+      END_OF_BLOCK.has(lower) ||
+      KW_PROCEDURE.has(lower) ||
+      KW_FUNCTION.has(lower) ||
+      (KW_ASYNC.has(lower) &&
+        (this.isKeywordAt(1, KW_PROCEDURE) || this.isKeywordAt(1, KW_FUNCTION)))
+    );
+  }
+
+  private advanceRecovery(): void {
+    if (!this.isEnd()) this.advance();
+  }
+
   private advance(): Token {
     const t = this.tokens[this.current];
     if (t === undefined) this.error('неожиданный конец файла');
@@ -834,6 +980,9 @@ class Parser {
 
   private error(message: string): never {
     const t = this.peek();
-    throw new Error(`Ошибка разбора: ${message} (строка ${t.line}, колонка ${t.column})`);
+    const text = `Ошибка разбора: ${message} (строка ${t.line}, колонка ${t.column})`;
+    if (!this.tolerant) throw new Error(text);
+    this.report(message);
+    throw new RecoverableParseError(text);
   }
 }

@@ -109,7 +109,26 @@ OneScript — открытая реализация языка, совмести
 `flushAsync` ждёт и фоновые задания, и `Обещания`, поэтому `<one-script>`/CLI не теряют
 отложенный вывод и ошибки; при отсутствии работы запуск остаётся синхронным.
 
+### 10. Редакторные инструменты `.osjs` → `src/lsp`, `editors/osjs/`
+
+Редакторо-независимый слой для нашего формата: TextMate-грамматика и конфигурация языка
+в `editors/osjs/` (плюс `languages.json` и `NOTICE.md`), каталог API и LSP-сервер.
+`.os` эти артефакты не заявляют — он остаётся у чужого расширения (спека 013).
+
+- `scripts/build-api-catalog.mjs` парсит таблицы [`docs/reference.md`](reference.md) и
+  генерирует `src/lsp/generated/api-catalog.ts` (коммитится; drift-тест и сверка с `src/`).
+  Команда — `pnpm build:catalog`.
+- `src/lsp/analysis.ts` — конвейер толерантных лексера/препроцессора/парсера, таблицы
+  символов и сбор диагностик; `diagnostics.ts`, `completion.ts`, `hover.ts`,
+  `semantic-tokens.ts`, `symbols.ts`, `document.ts`, `server.ts` (`registerHandlers`).
+- `src/node/lsp-server.ts` — stdio-точка входа, сборка `dist/lsp/server.mjs`
+  (`vite.lsp.config.ts`, `pnpm build:lsp`). `src/node` — единственное место с Node-API;
+  `src/lsp` не импортирует `node:*` (страж `tests/lsp-boundaries.test.ts`).
+- Толерантные entry points (`tokenizeTolerant`, `parseTolerant`,
+  `preprocessScript(tokens, { errors })`) аддитивны: поведение `parse()`/`tokenize()` и
+  семантика исполнения не меняются, браузерный бандл не затрагивается.
+
 ## Статус переноса
 
 Язык и стандартная библиотека переносятся по спецификациям `specs/`; реализованы
-`001`, `008`, `009`, `010`, `011`, `012` (см. сводку в `docs/status.md`).
+`001`, `008`–`014` (см. сводку в `docs/status.md`).

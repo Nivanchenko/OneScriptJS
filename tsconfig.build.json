@@ -10,5 +10,5 @@
     "types": []
   },
   "include": ["src"],
-  "exclude": ["src/browser", "src/node"]
+  "exclude": ["src/browser", "src/node", "src/lsp"]
 }

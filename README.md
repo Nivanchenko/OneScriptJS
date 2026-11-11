@@ -346,6 +346,43 @@ const results = runTests(source, createGlobalContext());
 `ИмеетДлину`, `Существует`, `Содержит`, …). Раннер синхронный: тесты с `Приостановить`
 не поддерживаются.
 
+## Редакторные инструменты (`.osjs`)
+
+Формат `.osjs` обслуживают собственные инструменты — отдельно от чужих линтеров для
+`.os` (границы — спека [`014`](specs/014-osjs-editor-tooling/spec.md)). Поставка
+редакторо-независимая:
+
+- **Описание языка** — [`editors/osjs/`](editors/osjs/): TextMate-грамматика
+  `source.osjs`, конфигурация языка (скобки, `//`, фолдинг `#Область`/`#Если`,
+  word pattern) и метаданные `*.osjs → osjs`. `*.os` не заявляется. Основа
+  грамматики — MIT-копия `1c-syntax` (см. [`NOTICE.md`](editors/osjs/NOTICE.md)).
+- **LSP-сервер** — `src/lsp/` + `src/node/lsp-server.ts`, сборка
+  `dist/lsp/server.mjs`. Умеет: диагностика по мере набора (синтаксис + консервативные
+  семантические проверки), автодополнение, hover, semantic tokens, Outline
+  (`documentSymbol`), переход к определению. Работает по stdio, без сети и телеметрии.
+- **Каталог API** — `src/lsp/generated/api-catalog.ts` генерируется из
+  [`docs/reference.md`](docs/reference.md) (`pnpm build:catalog`); расхождение ловит
+  drift-тест `tests/lsp-catalog.test.ts`.
+
+```bash
+pnpm build:lsp                    # собрать dist/lsp/server.mjs
+node dist/lsp/server.mjs          # stdio; подключить в любом LSP-клиенте
+```
+
+Пример конфигурации Neovim:
+
+```lua
+vim.lsp.start({
+  name = 'osjs',
+  cmd = { 'node', '/абсолютный/путь/OneScriptJS/dist/lsp/server.mjs' },
+  root_dir = vim.fn.getcwd(),
+})
+```
+
+Пример для ручной проверки — [`examples/editor.osjs`](examples/editor.osjs),
+фикстуры — `tests/fixtures/lsp/`. Тонкий клиент VS Code (установка из `.vsix`) —
+отдельная следующая работа; грамматика и сервер от него не зависят.
+
 ## Практические рецепты
 
 ### 1. Коллекции, JSON и `Формат` (Node)

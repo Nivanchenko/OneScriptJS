@@ -44,7 +44,10 @@
 | Проверка типов | `pnpm typecheck` |
 | Собрать браузерный бандл (`dist/onescript.js`) | `pnpm build:browser` |
 | Собрать Node-библиотеку (`dist/node/`) | `pnpm build:node` |
-| Полная сборка (типы + браузер + Node) | `pnpm build` |
+| Полная сборка (типы + браузер + Node + LSP) | `pnpm build` |
+| Собрать LSP-сервер (`dist/lsp/server.mjs`) | `pnpm build:lsp` |
+| Перегенерировать каталог API для инструментов | `pnpm build:catalog` |
+| Запустить LSP-сервер (stdio) | `pnpm lsp` |
 | Запустить тесты | `pnpm test` |
 | Проверить, что API задокументирован в справочнике | `pnpm check:docs` |
 | Тесты в watch-режиме | `pnpm test:watch` |
@@ -61,11 +64,17 @@ OneScriptJS/
 ├── tsconfig.json / tsconfig.build.json
 ├── vite.config.ts          ← браузерная сборка (onescript.js)
 ├── vite.node.config.ts     ← Node-сборка (ESM + CJS)
+├── vite.lsp.config.ts      ← сборка LSP-сервера (dist/lsp/server.mjs)
 ├── vitest.config.ts
 ├── src/
 │   ├── index.ts            ← точка входа библиотеки (Node / бандлеры)
-│   └── browser/
-│       └── onescript.ts  ← браузерная точка входа (<one-script>)
+│   ├── browser/
+│   │   └── onescript.ts  ← браузерная точка входа (<one-script>)
+│   ├── node/
+│   │   └── lsp-server.ts ← stdio-точка входа LSP-сервера
+│   └── lsp/                ← инструменты .osjs: анализ, диагностика, подсказки
+├── editors/osjs/           ← TextMate-грамматика, конфигурация языка, метаданные
+├── scripts/                ← check-api-docs.mjs, build-api-catalog.mjs, …
 ├── tests/                  ← юнит-тесты Vitest
 ├── examples/               ← HTML-примеры (hello.html — приёмочный сценарий)
 ├── docs/
@@ -124,6 +133,9 @@ OneScriptJS/
    пользовательские сценарии, обнови также README и `examples/`.
    Расхождение ловят `pnpm check:docs` (имя из `src/` не найдено в справочнике —
    exit 1) и Vitest-тест `tests/check-api-docs.test.ts` (входит в `pnpm test`).
+   Тот же справочник — источник каталога API для редакторных инструментов
+   (`src/lsp/generated/api-catalog.ts`): после изменения API/справочника выполни
+   `pnpm build:catalog`, иначе drift-тест `tests/lsp-catalog.test.ts` упадёт.
 10. **Формат наших файлов — `.osjs`** — в примерах, документации, командах и новых
     тестовых фикстурах использовать `.osjs`. `.os` упоминается только там, где
     речь о ванильном C#-OneScript или об эталонном корпусе `reference/`
@@ -191,7 +203,7 @@ OneScriptJS/
   параметрами/возвратом, объекты с полями и методами, перечисления.
 - [`task.md`](task.md) — исходное ТЗ и приёмочный HTML-пример.
 - [`docs/architecture.md`](docs/architecture.md) — карта слоёв и статус переноса.
-- [`specs/`](specs/) — спецификации незавершённых работ (001–013); план и задачи
+- [`specs/`](specs/) — спецификации работ (001–014); план и задачи
   создаются в каталоге конкретной спеки по мере готовности.
 - [`docs/bsl-surface.md`](docs/bsl-surface.md) — синтаксис и stdlib BSL (по `reference/tests`).
 - `reference/OneScript/AGENTS.md` — инструкции к оригиналу (для справки).
