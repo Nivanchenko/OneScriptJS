@@ -28,6 +28,7 @@ import { isBslObject } from './object';
 import type { BslObject } from './object';
 import { ScriptModuleObject } from './script-object';
 import { BslErrorInfo } from './error-info';
+import { BslPromise } from './promise';
 import type { BslGenerator, DriveOptions, MaybePromise, SliceController } from './async';
 import { TimeSlicer, drive, isThenable, yieldMaybe, yieldToHost } from './async';
 
@@ -222,7 +223,56 @@ export class Interpreter {
   /** Вызывает экспортный метод модуля; неэкспортный снаружи недоступен. */
   callExportedMethod(name: string, values: Value[], options?: DriveOptions): MaybePromise<Value> {
     if (!this.hasExportedMethod(name)) throw new Error(`Метод '${name}' не найден`);
+    const method = this.requireCtx().methods.get(key(name));
+    if (method?.isAsync) return this.startAsyncMethod(method, values);
     return drive(this.invokeMethodGen(name, values), options);
+  }
+
+  /**
+   * Запускает async-метод: исполнение идёт до первой приостановки, результат/ошибка
+   * попадают в `Обещание` (синхронно вызывающему не бросаются).
+   */
+  private startAsyncMethod(method: MethodDeclaration, values: Value[]): BslPromise {
+    // Async-исполнение уступает хост по квантам, чтобы страница не замирала.
+    this.slicer ??= new TimeSlicer();
+    const promise = new BslPromise(this.env);
+    let driven: MaybePromise<Value>;
+    try {
+      driven = drive(this.invokeAsyncGen(method, values));
+    } catch (error) {
+      promise.reject(error);
+      return promise;
+    }
+    if (isThenable(driven)) {
+      void driven.then(
+        (value) => promise.resolve(value),
+        (error: unknown) => promise.reject(error),
+      );
+    } else {
+      promise.resolve(driven);
+    }
+    return promise;
+  }
+
+  private *invokeAsyncGen(method: MethodDeclaration, values: Value[]): BslGenerator<Value> {
+    const ctx = this.requireCtx();
+    const localScope = new Scope(ctx.moduleScope);
+    for (let i = 0; i < method.params.length; i++) {
+      const p = method.params[i]!;
+      let value: Value;
+      if (i < values.length) value = values[i];
+      else if (p.defaultValue) value = yield* this.eval(p.defaultValue, ctx.moduleScope, ctx);
+      else value = undefined;
+      // Параметры async-методов передаются только по значению (как в 1C).
+      localScope.set(p.name, value);
+    }
+    try {
+      yield* this.execGotoBlock(method.body, localScope, ctx);
+    } catch (e) {
+      if (e instanceof ReturnSignal) return e.value;
+      throw e;
+    }
+    return undefined;
   }
 
   /** Объявлена ли переменная с таким именем как экспортная. */
@@ -554,6 +604,12 @@ export class Interpreter {
         if (toBoolean(condition)) return yield* this.eval(expr.then, scope, ctx);
         return yield* this.eval(expr.else, scope, ctx);
       }
+      case 'AwaitExpression': {
+        const value = yield* this.eval(expr.operand, scope, ctx);
+        if (value instanceof BslPromise) return yield* yieldMaybe(value.await());
+        // Ожидание не-Обещания возвращает значение как есть.
+        return value;
+      }
       case 'NewObjectExpression': {
         const args = yield* this.evalArgs(expr.args, scope, ctx);
         return yield* yieldMaybe(this.env.construct(expr.typeName, args));
@@ -649,7 +705,13 @@ export class Interpreter {
         return undefined;
       }
       const method = ctx.methods.get(lower);
-      if (method) return yield* this.callMethod(method, expr.args, scope, ctx);
+      if (method) {
+        if (method.isAsync) {
+          const values = yield* this.evalArgs(expr.args, scope, ctx);
+          return this.startAsyncMethod(method, values);
+        }
+        return yield* this.callMethod(method, expr.args, scope, ctx);
+      }
       const args = yield* this.evalArgs(expr.args, scope, ctx);
       return yield* yieldMaybe(this.env.call(expr.callee.name, args));
     }

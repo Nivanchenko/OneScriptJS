@@ -74,6 +74,12 @@ export interface NewObjectExpression extends Node {
   args: Expression[];
 }
 
+/** `Ждать <выражение>` / `Await <expression>`. */
+export interface AwaitExpression extends Node {
+  kind: 'AwaitExpression';
+  operand: Expression;
+}
+
 export type Expression =
   | NumberLiteral
   | StringLiteral
@@ -88,7 +94,8 @@ export type Expression =
   | MemberExpression
   | IndexExpression
   | TernaryExpression
-  | NewObjectExpression;
+  | NewObjectExpression
+  | AwaitExpression;
 
 // --- Операторы ---
 
@@ -118,6 +125,8 @@ export interface MethodDeclaration extends Node {
   kind: 'MethodDeclaration';
   name: string;
   isFunction: boolean;
+  /** `Асинх`/`Async` перед объявлением. */
+  isAsync: boolean;
   exported: boolean;
   params: MethodParameter[];
   body: Statement[];

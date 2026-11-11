@@ -1,5 +1,6 @@
 import type { Value } from './values';
 import type { MaybePromise } from './async';
+import type { AsyncTracker } from './promise';
 import type { BslObject } from './object';
 import type { Interpreter } from './interpreter';
 import { EventProcessor } from './events';
@@ -19,8 +20,12 @@ export interface RuntimeEnvironment {
   resolveGlobal?(name: string): Value | undefined;
   /** Реестр подписок на события (у стандартного контекста есть всегда). */
   events?: EventProcessor;
-  /** Дождаться активных фоновых заданий перед завершением запуска. */
+  /** Дождаться активных фоновых заданий и незавершённых `Обещаний` перед завершением. */
   flushAsync?(): MaybePromise<void>;
+  /** Учёт незавершённого `Обещания` (снимается по `completion`). */
+  trackAsync?(tracker: AsyncTracker): void;
+  /** Необработанная ошибка `Обещания` (по умолчанию — `console.error`). */
+  reportUnhandledError?(error: unknown): void;
 }
 
 /** Реестр, достаточный загрузчику модулей: глобальные имена и типы. */
@@ -56,8 +61,10 @@ export class GlobalContext implements RuntimeEnvironment {
   modules?: ModuleHost;
   /** Платформенное ленивое чтение исходника: Node ставит `fs`, браузер — нет. */
   loadSource?: (path: string) => string;
-  /** Хук: дождаться активных фоновых заданий (ставит стандартная библиотека). */
+  /** Хук: дождаться активных фоновых заданий и `Обещаний` (ставит стандартная библиотека). */
   flushAsync?: () => MaybePromise<void>;
+  /** Незавершённые `Обещания` текущего запуска. */
+  readonly pendingPromises = new Set<AsyncTracker>();
 
   register(name: string, fn: GlobalFunction): void {
     this.functions.set(name.toLowerCase(), fn);
@@ -99,5 +106,14 @@ export class GlobalContext implements RuntimeEnvironment {
 
   resolveGlobal(name: string): Value | undefined {
     return this.globals.get(name.toLowerCase());
+  }
+
+  trackAsync(tracker: AsyncTracker): void {
+    this.pendingPromises.add(tracker);
+    void tracker.completion.then(() => this.pendingPromises.delete(tracker));
+  }
+
+  reportUnhandledError(error: unknown): void {
+    console.error(error instanceof Error ? error.message : String(error));
   }
 }
