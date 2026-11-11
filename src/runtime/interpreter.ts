@@ -11,6 +11,7 @@ import type {
   MemberExpression,
   MethodDeclaration,
   Program,
+  RemoveHandlerStatement,
   Statement,
   TryExceptStatement,
   UnaryExpression,
@@ -311,6 +312,9 @@ export class Interpreter {
       case 'AddHandlerStatement':
         this.execAddHandler(stmt, scope, ctx);
         break;
+      case 'RemoveHandlerStatement':
+        this.execRemoveHandler(stmt, scope, ctx);
+        break;
       case 'LabelStatement':
         break; // маркер — no-op
       case 'GotoStatement':
@@ -340,6 +344,24 @@ export class Interpreter {
       throw new Error(`Обработчик должен быть объектом, а не ${typeName(target)}`);
     }
     events.add(source, eventName, target, method, false);
+  }
+
+  /** Отписка: `УдалитьОбработчик <источник>.<событие>, <обработчик>`. */
+  private execRemoveHandler(stmt: RemoveHandlerStatement, scope: Scope, ctx: Ctx): void {
+    const events = this.env.events;
+    if (!events) throw new Error('Реестр событий недоступен в этом окружении');
+    const source = this.eval(stmt.eventSource, scope, ctx);
+    if (!isBslObject(source)) {
+      throw new Error(`Источник события должен быть объектом, а не ${typeName(source)}`);
+    }
+    const eventName = toStringValue(this.eval(stmt.eventName, scope, ctx));
+    const method = toStringValue(this.eval(stmt.handlerMethod, scope, ctx));
+    const target =
+      stmt.handlerTarget === null ? this.getThisObject() : this.eval(stmt.handlerTarget, scope, ctx);
+    if (!isBslObject(target)) {
+      throw new Error(`Обработчик должен быть объектом, а не ${typeName(target)}`);
+    }
+    events.remove(source, eventName, target, method);
   }
 
   private execForLoop(stmt: ForLoop, scope: Scope, ctx: Ctx): void {    const from = toNumber(this.eval(stmt.from, scope, ctx));
