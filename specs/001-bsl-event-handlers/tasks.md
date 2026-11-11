@@ -134,7 +134,11 @@ Single project (см. `plan.md`): `src/`, `tests/` в корне репозит�
 
 - [x] T024 [P] Браузерная приёмка: `tests/browser-events.test.ts` на happy-dom — `<one-script>` с `ДобавитьОбработчик` и объявлением события, проверка вывода через `console.log`
 - [x] T025 [P] Проверить ядро на изоляцию сред: в `src/lexer`, `src/parser`, `src/ast`, `src/runtime`, `src/stdlib` нет импортов `node:*`, `fs`, `path`, `document`, `window` (grep); собрать `pnpm build:browser`
-- [ ] T026 [P] Обновить документацию: `docs/status.md` (T44 закрыт, отложенный полный прогон `events.os` → T39) и отметка T44 в `docs/plan.md`
+- [x] T026 [P] Обновить документацию: `docs/status.md` (T44 закрыт, отложенный полный прогон `events.os` → T39) и отметка T44 в `docs/plan.md`
+
+  `docs/plan.md` удалён (устаревший план вынесен в `specs/`), отметка T44 не требуется;
+  `docs/status.md` обновлён: спека 001 в «реализовано», 435 тестов / 56 файлов, `events.os`
+  теперь падает на `ПодключитьСценарий` (спека 004), а не на разборе.
 - [ ] T027 Финальная проверка по `quickstart.md` и `plan.md` → Verification: `pnpm typecheck && pnpm test`, `pnpm build`, `node scripts/run-reference-tests.mjs` (не хуже 18/66); зафиксировать вывод
 
 ---
