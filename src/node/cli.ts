@@ -9,7 +9,7 @@ async function main(): Promise<void> {
 
   if (arg === '--help' || arg === '-h') {
     console.log('oscript — OneScript (BSL/1С) на TypeScript');
-    console.log('Использование: oscript <файл.os>   или   echo "..." | oscript');
+    console.log('Использование: oscript <файл.osjs>   или   echo "..." | oscript');
     console.log('  --help, -h      показать справку');
     console.log('  --version, -v   показать версию');
     return;
@@ -19,7 +19,7 @@ async function main(): Promise<void> {
     return;
   }
   if (!arg && process.stdin.isTTY) {
-    console.error('Использование: oscript <файл.os>   или   echo "..." | oscript');
+    console.error('Использование: oscript <файл.osjs>   или   echo "..." | oscript');
     process.exitCode = 2;
     return;
   }

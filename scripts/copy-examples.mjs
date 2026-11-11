@@ -1,4 +1,4 @@
-// Копирует HTML-примеры и их локальные данные (например, examples/lib/*.os)
+// Копирует HTML-примеры и их локальные данные (например, examples/lib/*.osjs)
 // в dist/, чтобы `vite preview` мог их отдать.
 // Использование: node scripts/copy-examples.mjs
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs';

@@ -3,7 +3,7 @@ import type { Interpreter } from './interpreter';
 import type { Value } from './values';
 import type { MaybePromise } from './async';
 
-/** Имя файла без пути и расширения: `lib/НекийСкрипт.os` → `НекийСкрипт`. */
+/** Имя файла без пути и расширения: `lib/НекийСкрипт.osjs` → `НекийСкрипт`. */
 export function nameFromPath(path: string): string {
   const base = path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
   // В браузере путь приходит URL-кодированным — имя должно остаться BSL-идентификатором.
