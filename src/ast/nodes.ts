@@ -177,6 +177,22 @@ export interface GotoStatement extends Node {
   kind: 'GotoStatement';
   label: string;
 }
+interface HandlerStatementBase extends Node {
+  /** Объект-источник события. */
+  eventSource: Expression;
+  /** Имя события: `StringLiteral` или динамическое индексное выражение. */
+  eventName: Expression;
+  /** Объект-обработчик; `null` — метод текущего модуля. */
+  handlerTarget: Expression | null;
+  /** Имя метода-обработчика: `StringLiteral` или индексное выражение. */
+  handlerMethod: Expression;
+}
+export interface AddHandlerStatement extends HandlerStatementBase {
+  kind: 'AddHandlerStatement';
+}
+export interface RemoveHandlerStatement extends HandlerStatementBase {
+  kind: 'RemoveHandlerStatement';
+}
 
 export type Statement =
   | Assignment
@@ -194,7 +210,9 @@ export type Statement =
   | RaiseStatement
   | ExecuteStatement
   | LabelStatement
-  | GotoStatement;
+  | GotoStatement
+  | AddHandlerStatement
+  | RemoveHandlerStatement;
 
 export interface Program extends Node {
   kind: 'Program';
