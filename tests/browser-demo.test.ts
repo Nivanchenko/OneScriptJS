@@ -137,6 +137,43 @@ describe('демо-страницы examples/', () => {
     );
   });
 
+  it('sandbox.html: код из редактора выполняется по кнопке и попадает в журнал', async () => {
+    const window = await loadDemo('sandbox.html');
+    const log = window.document.getElementById('журнал');
+    const run = window.document.getElementById('выполнить') as unknown as HTMLElement;
+
+    run.click();
+
+    expect(log?.textContent).toContain('Запуск #1');
+    expect(log?.textContent).toContain('Привет, Мир!');
+    expect(log?.textContent).toContain('Выполнено без ошибок');
+    expect(window.document.getElementById('статус')?.textContent).toBe('Выполнено без ошибок');
+  });
+
+  it('sandbox.html: ошибка выполнения показывается в журнале и не роняет страницу', async () => {
+    const window = await loadDemo('sandbox.html');
+    const code = window.document.getElementById('код') as unknown as HTMLTextAreaElement;
+    const run = window.document.getElementById('выполнить') as unknown as HTMLElement;
+    code.value = 'Сообщить(Упс());';
+
+    run.click();
+
+    const log = window.document.getElementById('журнал')?.textContent ?? '';
+    expect(log).toContain('Ошибка');
+    expect(log).toContain('Упс');
+    expect(window.document.getElementById('статус')?.textContent).toContain('Ошибка');
+  });
+
+  it('sandbox.html: кнопка примера подставляет код в редактор', async () => {
+    const window = await loadDemo('sandbox.html');
+    const code = window.document.getElementById('код') as unknown as HTMLTextAreaElement;
+    const button = window.document.querySelector('[data-example="цикл"]') as unknown as HTMLElement;
+
+    button.click();
+
+    expect(code.value).toContain('Для');
+  });
+
   it('form.html: submit отменяется, приветствие показывается', async () => {
     const window = await loadDemo('form.html');
     const form = window.document.getElementById('форма') as unknown as HTMLElement;

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OneScriptJS — песочница</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: #1f2328;
+      background: #f6f7f9;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.25rem 1rem;
+      padding: 0.75rem 1.25rem;
+      background: #24292f;
+      color: #fff;
+    }
+    header h1 { margin: 0; font-size: 1.05rem; }
+    header p { margin: 0; font-size: 0.85rem; color: #b6bec6; }
+    main {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+      gap: 1rem;
+      padding: 1rem;
+    }
+    .панель {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid #d8dee4;
+      border-radius: 0.5rem;
+    }
+    .шапка {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid #eaeef2;
+      background: #f6f8fa;
+    }
+    .шапка h2 {
+      flex: 1;
+      margin: 0;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #57606a;
+    }
+    button {
+      font: inherit;
+      color: inherit;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      background: #fff;
+      padding: 0.35rem 0.7rem;
+      cursor: pointer;
+    }
+    button:hover { background: #f3f4f6; }
+    .примеры { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .примеры button { padding: 0.2rem 0.55rem; font-size: 0.8rem; }
+    .редактор { position: relative; flex: 1; min-height: 18rem; overflow: hidden; }
+    #код,
+    #подсветка {
+      position: absolute;
+      left: 0;
+      top: 0;
+      margin: 0;
+      padding: 0.75rem;
+      border: 0;
+      tab-size: 2;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    #подсветка { overflow: hidden; pointer-events: none; color: #1f2328; }
+    #код {
+      inset: 0;
+      z-index: 1;
+      outline: none;
+      resize: none;
+      overflow: auto;
+      background: transparent;
+      color: transparent;
+      caret-color: #1f2328;
+    }
+    .редактор:focus-within { box-shadow: inset 0 0 0 2px #0969da33; }
+    .ключевое { color: #cf222e; }
+    .строка { color: #0a3069; }
+    .число,
+    .дата,
+    .литерал { color: #0550ae; }
+    .комментарий { color: #6e7781; }
+    .оператор { color: #8250df; }
+    .препроцессор { color: #8250df; }
+    .действия {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 0.75rem;
+      border-top: 1px solid #eaeef2;
+      background: #f6f8fa;
+    }
+    #выполнить {
+      border-color: #1f883d;
+      background: #1f883d;
+      color: #fff;
+      font-weight: 600;
+    }
+    #выполнить:hover { background: #1a7f37; }
+    .подсказка { font-size: 0.78rem; color: #6e7681; }
+    .статус {
+      margin-left: auto;
+      font-size: 0.82rem;
+      color: #57606a;
+      overflow-wrap: anywhere;
+    }
+    .журнал {
+      flex: 1;
+      min-height: 18rem;
+      overflow: auto;
+      padding: 0.5rem 0.75rem;
+      background: #0d1117;
+      color: #d1d9e0;
+      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .журнал:empty::before {
+      content: "Здесь появится вывод и ошибки выполнения.";
+      color: #6e7681;
+    }
+    .запуск {
+      margin: 0.9rem 0 0.35rem;
+      padding-top: 0.7rem;
+      border-top: 1px dashed #30363d;
+      color: #79c0ff;
+      font-weight: 600;
+    }
+    .запуск:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+    .запись {
+      padding-left: 0.9rem;
+      border-left: 2px solid #30363d;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .итог {
+      margin-top: 0.5rem;
+      padding: 0.35rem 0.6rem;
+      border-radius: 6px;
+      font-weight: 600;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .успех { color: #3fb950; background: #12261e; }
+    .ошибка { color: #ff7b72; background: #25171c; }
+    @media (max-width: 800px) {
+      body { height: auto; min-height: 100vh; overflow: visible; }
+      main { grid-template-columns: 1fr; }
+      .журнал { max-height: 60vh; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>OneScriptJS — песочница</h1>
+    <p>Напишите код на BSL и нажмите «Выполнить» — вывод появится в журнале отладки.</p>
+  </header>
+
+  <main>
+    <section class="панель" aria-label="Редактор кода">
+      <div class="шапка">
+        <h2>Код</h2>
+        <div class="примеры" role="group" aria-label="Готовые примеры">
+          <button type="button" data-os-click="ЗагрузитьПример(Событие.Цель)" data-example="привет">Привет</button>
+          <button type="button" data-os-click="ЗагрузитьПример(Событие.Цель)" data-example="цикл">Цикл</button>
+          <button type="button" data-os-click="ЗагрузитьПример(Событие.Цель)" data-example="массив">Массив</button>
+          <button type="button" data-os-click="ЗагрузитьПример(Событие.Цель)" data-example="функция">Функция</button>
+        </div>
+      </div>
+      <div class="редактор">
+        <pre id="подсветка" aria-hidden="true"></pre>
+        <textarea id="код" spellcheck="false" autocomplete="off" aria-label="Код на BSL">Приветствие = "Привет, Мир!";
+Сообщить(Приветствие);</textarea>
+      </div>
+      <div class="действия">
+        <button id="выполнить" type="button" data-os-click="ВыполнитьКод()">Выполнить</button>
+        <span class="подсказка">Ctrl+Enter</span>
+        <output id="статус" class="статус">Готово к запуску</output>
+      </div>
+    </section>
+
+    <section class="панель" aria-label="Журнал отладки">
+      <div class="шапка">
+        <h2>Отладка</h2>
+        <button type="button" data-os-click="ОчиститьЖурнал()">Очистить</button>
+      </div>
+      <div id="журнал" class="журнал" role="log" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script src="/onescript.js"></script>
+  <script>
+    const редактор = document.getElementById('код');
+    const подсветка = document.getElementById('подсветка');
+
+    // Слой подсветки лежит под прозрачным textarea: размер и прокрутка совпадают.
+    function выровнятьСлой() {
+      подсветка.style.width = редактор.clientWidth + 'px';
+      подсветка.style.height = редактор.clientHeight + 'px';
+      подсветка.scrollTop = редактор.scrollTop;
+      подсветка.scrollLeft = редактор.scrollLeft;
+    }
+
+    function обновитьПодсветку() {
+      подсветка.innerHTML =
+        OneScript.highlight(редактор.value) + (редактор.value.endsWith('\n') ? ' ' : '');
+      выровнятьСлой();
+    }
+
+    редактор.addEventListener('input', обновитьПодсветку);
+    редактор.addEventListener('scroll', выровнятьСлой);
+    window.addEventListener('resize', выровнятьСлой);
+    // Кнопка примера подставляет код на стороне BSL: обновляем подсветку после обработчика движка.
+    document.querySelector('.примеры').addEventListener('click', () => queueMicrotask(обновитьПодсветку));
+
+    редактор.addEventListener('keydown', (событие) => {
+      if (событие.key === 'Enter' && (событие.ctrlKey || событие.metaKey)) {
+        событие.preventDefault();
+        document.getElementById('выполнить').click();
+      }
+    });
+
+    const журнал = document.getElementById('журнал');
+    new MutationObserver(() => {
+      журнал.scrollTop = журнал.scrollHeight;
+    }).observe(журнал, { childList: true });
+
+    обновитьПодсветку();
+  </script>
+
+  <!-- Готовые примеры: raw text, поэтому кавычки и `<` внутри не экранируются. -->
+  <script type="text/plain" id="пример-привет">Приветствие = "Привет, Мир!";
+Сообщить(Приветствие);</script>
+  <script type="text/plain" id="пример-цикл">Для Счётчик = 1 По 5 Цикл
+  Если Счётчик % 2 = 0 Тогда
+    Сообщить(Счётчик + " — чётное");
+  Иначе
+    Сообщить(Счётчик + " — нечётное");
+  КонецЕсли;
+КонецЦикла;</script>
+  <script type="text/plain" id="пример-массив">Города = Новый Массив;
+Города.Добавить("Москва");
+Города.Добавить("Питер");
+Города.Добавить("Казань");
+Для Каждого Город Из Города Цикл
+  Сообщить("Город: " + Город);
+КонецЦикла;
+Сообщить("Всего городов: " + Города.Количество());</script>
+  <script type="text/plain" id="пример-функция">Функция Квадрат(Знач Число)
+  Возврат Число * Число;
+КонецФункции
+
+Для Счётчик = 1 По 3 Цикл
+  Сообщить("Квадрат " + Счётчик + " = " + Квадрат(Счётчик));
+КонецЦикла;</script>
+
+  <script type="text/osjs">
+    Перем ЖурналПесочницы;
+    Перем НомерЗапуска;
+
+    Функция ЭлементПесочницы(Знач Идентификатор)
+      Возврат Документ.ПолучитьЭлемент(Идентификатор);
+    КонецФункции
+
+    // Локальный метод перекрывает глобальный `Сообщить`: вывод песочницы
+    // идёт в журнал страницы, а не в консоль браузера.
+    Процедура Сообщить(Знач Текст, Знач Статус = Неопределено)
+      Запись = Документ.СоздатьЭлемент("div");
+      Запись.Класс = "запись";
+      Запись.Текст = Строка(Текст);
+      Запись.ДобавитьВ(ЖурналПесочницы);
+    КонецПроцедуры
+
+    Процедура ЗагрузитьПример(Знач Кнопка)
+      Ключ = Кнопка.ПолучитьАтрибут("data-example");
+      Если Ключ = Неопределено Тогда
+        Возврат;
+      КонецЕсли;
+
+      ЭлементПесочницы("код").Значение = ЭлементПесочницы("пример-" + Ключ).Текст;
+    КонецПроцедуры
+
+    Процедура ВыполнитьКод()
+      НомерЗапуска = НомерЗапуска + 1;
+
+      Заголовок = Документ.СоздатьЭлемент("div");
+      Заголовок.Класс = "запуск";
+      Заголовок.Текст = "Запуск #" + Строка(НомерЗапуска);
+      Заголовок.ДобавитьВ(ЖурналПесочницы);
+
+      Попытка
+        Выполнить(ЭлементПесочницы("код").Значение);
+        Итог = "Выполнено без ошибок";
+        КлассИтога = "успех";
+      Исключение
+        Итог = "Ошибка: " + ПодробноеПредставлениеОшибки(ИнформацияОбОшибке());
+        КлассИтога = "ошибка";
+      КонецПопытки;
+
+      ИтоговаяСтрока = Документ.СоздатьЭлемент("div");
+      ИтоговаяСтрока.Класс = "итог " + КлассИтога;
+      ИтоговаяСтрока.Текст = Итог;
+      ИтоговаяСтрока.ДобавитьВ(ЖурналПесочницы);
+
+      ЭлементПесочницы("статус").Текст = Итог;
+    КонецПроцедуры
+
+    Процедура ОчиститьЖурнал()
+      ЖурналПесочницы.HTML = "";
+      ЭлементПесочницы("статус").Текст = "Журнал очищен";
+    КонецПроцедуры
+
+    ЖурналПесочницы = Документ.ПолучитьЭлемент("журнал");
+    НомерЗапуска = 0;
+  </script>
+</body>
+</html>

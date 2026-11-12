@@ -8,11 +8,16 @@
  * Вывод `Сообщить()` идёт через стандартную библиотеку в `console.log`.
  * Дополнительно регистрируется объект `Документ` для работы с DOM.
  * Подключается как <script src="/onescript.js"></script>.
+ *
+ * Экспортируется `OneScript.highlight(источник)` — HTML с подсветкой BSL тем же
+ * лексером, что и движок (используется редактором-песочницей).
  */
 import { run } from '../runtime/runner';
 import { preloadModuleSources, resolveUrlPath } from './module-source';
 import { createBrowserGlobalContext } from './context';
 import { registerScriptContext, scheduleDeclarativeBinding } from './dom-events';
+
+export { highlight } from './highlight';
 
 const BLOCK_TYPE = 'text/osjs';
 let started = false;

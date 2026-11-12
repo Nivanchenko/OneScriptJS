@@ -58,6 +58,10 @@ pnpm dev             # http://localhost:5173/examples/index.html
 `Сообщить()` пишет в `console.log`; блок `script[type="text/osjs"]` нативно не
 отображается, код выполняется после разбора документа.
 
+Браузерный бандл дополнительно отдаёт `OneScript.highlight(источник)` — HTML с
+подсветкой BSL тем же лексером, что и движок. Так раскрашен редактор в
+[`examples/sandbox.html`](examples/sandbox.html).
+
 ### Форма встраивания
 
 Канон — HTML data block `script[type="text/osjs"]` (спека
@@ -548,6 +552,7 @@ pnpm oscript script.osjs
 | Страница | Что демонстрирует |
 |---|---|
 | [`hello.html`](examples/hello.html) | приёмочный пример из `task.md`: переменные, условия, `Сообщить` |
+| [`sandbox.html`](examples/sandbox.html) | песочница: редактор с подсветкой и примером «Привет, Мир», кнопка «Выполнить», готовые примеры и журнал отладки |
 | [`counter.html`](examples/counter.html) | счётчик на `data-os-click`, переменная через `Перем` |
 | [`delegation.html`](examples/delegation.html) | один обработчик на контейнере: `Событие.Цель` и много кнопок |
 | [`input.html`](examples/input.html) | зеркалирование ввода: `data-os-input` и процедура модуля |
