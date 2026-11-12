@@ -81,3 +81,25 @@ nvim tests/fixtures/lsp/embedded/broken.html
   трогаются; completion вне блоков пуст.
 - Импорты в definition резолвятся от URL HTML-файла; в рантайме база — `document.baseURI`
   (для локальной страницы совпадает).
+
+## 5. Ручная проверка остальных сценариев (`manual-check.html`)
+
+```bash
+nvim tests/fixtures/lsp/embedded/manual-check.html
+```
+
+Ожидаемо (проверено headless с конфигом `osjs_html` и подтверждено владельцем в GUI Neovim):
+
+| Действие | Ожидание |
+|---|---|
+| открыть файл | клиент `osjs_html` attached; **ровно 1** диагностика `OSJS2001` — строка 15, колонка 11 (координаты HTML) |
+| курсор на `Сумма(2, 3)` (строка 16), `gd` | переход на объявление `Функция Сумма` (строка 10; range указывает на имя `Сумма`) |
+| курсор внутрь `"../lib/Модуль.osjs"` (строка 8), `gd` | откроется `tests/fixtures/lsp/lib/Модуль.osjs` |
+| `K` на `Сумма` / `Сообщить` | hover: локальный символ / сигнатура `Сообщить / Message` |
+| completion во втором блоке (`ВторойБлок`) | есть `Сообщить`, **нет** `Сумма` (изоляция блоков) |
+| completion/hover/диагностика вне блоков (строка 4/5) | пусто |
+| `tests/fixtures/lsp/embedded/no-blocks.html`, `examples/hello.html` | наших диагностик/подсказок нет |
+| `examples/editor.osjs` | работает как в 014 (подсветка/completion/hover/gd/gO) |
+
+Если что-то не так: `:set ft?` (html), `:lua =vim.lsp.get_clients({bufnr=0})`, `:checkhealth vim.lsp`,
+`:e ~/.local/state/nvim/lsp.log`, `pnpm build:lsp`.
