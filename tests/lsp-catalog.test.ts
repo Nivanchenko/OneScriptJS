@@ -77,6 +77,14 @@ describe('каталог API из docs/reference.md', () => {
     expect(knownGlobalNames().has('направлениепоиска')).toBe(true);
   });
 
+  it('типы без таблиц методов/свойств есть в каталоге (УникальныйИдентификатор/UUID)', () => {
+    const uuid = findType('УникальныйИдентификатор');
+    expect(uuid).toBeDefined();
+    expect(uuid?.en).toBe('UUID');
+    expect(uuid?.constructible).toBe(true);
+    expect(findType('uuid')?.ru).toBe('УникальныйИдентификатор');
+  });
+
   it('соблюдает инварианты данных: имена, арность, алиасы', () => {
     for (const fn of catalog.functions) {
       expect(fn.ru).toMatch(IDENT);
