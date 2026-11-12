@@ -211,7 +211,7 @@ OneScriptJS/
   параметрами/возвратом, объекты с полями и методами, перечисления.
 - [`task.md`](task.md) — исходное ТЗ и приёмочный HTML-пример.
 - [`docs/architecture.md`](docs/architecture.md) — карта слоёв и статус переноса.
-- [`specs/`](specs/) — спецификации работ (001–017); план и задачи
+- [`specs/`](specs/) — спецификации работ (001–019); план и задачи
   создаются в каталоге конкретной спеки по мере готовности.
 - [`docs/bsl-surface.md`](docs/bsl-surface.md) — синтаксис и stdlib BSL (по `reference/tests`).
 - `reference/OneScript/AGENTS.md` — инструкции к оригиналу (для справки).

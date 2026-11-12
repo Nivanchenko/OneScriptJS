@@ -7,16 +7,28 @@ import { flush, renderPage, runEngine } from './helpers/browser-script';
 const examplesDir = join(process.cwd(), 'examples');
 
 /** Разбирает демо-страницу: ставит body в happy-dom и исполняет её script-блоки. */
-async function loadDemo(file: string): Promise<Window> {
+async function loadDemo(
+  file: string,
+  fetchText?: (url: string) => string,
+): Promise<Window> {
   const html = readFileSync(join(examplesDir, file), 'utf8');
   const bodyMatch = /<body[^>]*>([\s\S]*)<\/body>/i.exec(html);
   if (!bodyMatch) throw new Error(`В ${file} нет <body>`);
-  // внешние <script src> в тесте не нужны
-  const body = bodyMatch[1]!.replace(/<script\b[^>]*>\s*<\/script>/gi, '');
+  // внешние <script src> в тесте не нужны; data blocks оставляем движку
+  const body = bodyMatch[1]!.replace(
+    /<script\b(?![^>]*type\s*=\s*["']?text\/osjs)[^>]*>\s*<\/script>/gi,
+    '',
+  );
 
   const window = renderPage([], body);
   if (window.document.querySelectorAll('script[type="text/osjs"]').length === 0) {
     throw new Error(`В ${file} нет <script type="text/osjs">`);
+  }
+  if (fetchText !== undefined) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string) => new window.Response(fetchText(String(input)), { status: 200 })),
+    );
   }
   await runEngine();
   await flush();
@@ -109,6 +121,20 @@ describe('демо-страницы examples/', () => {
     expect(output).toContain('Формат даты: 11.11.2026 15:30');
     expect(output).toContain('ЗаписатьJSON: {"имя":"Анна","город":"Москва","возраст":30}');
     expect(output).toContain('ПрочитатьJSON: имя = Анна, город = Москва, возраст = 30');
+  });
+
+  it('external.html: внешний .osjs по ссылке исполняется', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const window = await loadDemo('external.html', (input) =>
+      readFileSync(
+        join(examplesDir, decodeURI(new URL(input).pathname).replace(/^\/app\//, '')),
+        'utf8',
+      ),
+    );
+
+    expect(window.document.getElementById('вывод')?.textContent).toBe(
+      'Файл исполнен: lib/Внешний.osjs',
+    );
   });
 
   it('form.html: submit отменяется, приветствие показывается', async () => {

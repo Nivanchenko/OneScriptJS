@@ -1,3 +1,4 @@
+import type { Window } from 'happy-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flush, makeScriptBlock, renderPage, runEngine } from './helpers/browser-script';
 
@@ -87,18 +88,6 @@ describe('script[type="text/osjs"]: исполнение (US1)', () => {
     expect(logs).toEqual(['наш']);
   });
 
-  it('игнорирует src и исполняет inline-содержимое', async () => {
-    const logs = captureLogs();
-    renderPage([
-      '<script type="text/osjs" src="app.osjs">Сообщить("inline");</script>',
-    ]);
-
-    await runEngine();
-    await flush();
-
-    expect(logs).toEqual(['inline']);
-  });
-
   it('не исполняет блоки, добавленные после запуска', async () => {
     const logs = captureLogs();
     const window = renderPage([makeScriptBlock('Сообщить("старт");')]);
@@ -127,6 +116,171 @@ describe('script[type="text/osjs"]: исполнение (US1)', () => {
     await flush();
 
     expect(logs).toEqual(['один раз']);
+  });
+});
+
+/** fetch-мок: URL → текст ответа; неизвестный URL — 404. */
+function stubFetch(
+  window: Window,
+  routes: Readonly<Record<string, string>>,
+): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn(async (input: string) => {
+    const url = decodeURI(String(input));
+    const text = routes[url];
+    return text === undefined
+      ? new window.Response('', { status: 404 })
+      : new window.Response(text, { status: 200 });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+describe('script[type="text/osjs"]: внешний src (спека 019)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('загружает внешний .osjs; inline-содержимое игнорируется', async () => {
+    const logs = captureLogs();
+    const window = renderPage([
+      '<script type="text/osjs" src="app.osjs">Сообщить("inline");</script>',
+    ]);
+    const fetchMock = stubFetch(window, {
+      'http://localhost/app/app.osjs': 'Сообщить("внешний");',
+    });
+
+    await runEngine();
+    await flush();
+
+    expect(logs).toEqual(['внешний']);
+    expect(decodeURI(String(fetchMock.mock.calls[0]?.[0]))).toBe('http://localhost/app/app.osjs');
+  });
+
+  it('#Использовать разрешается относительно URL внешнего файла', async () => {
+    const logs = captureLogs();
+    const window = renderPage(['<script type="text/osjs" src="scripts/app.osjs"></script>']);
+    const fetchMock = stubFetch(window, {
+      'http://localhost/app/scripts/app.osjs':
+        '#Использовать "lib/Модуль.osjs"\nСообщить(Модуль.Сложить(2, 3));',
+      'http://localhost/app/scripts/lib/Модуль.osjs':
+        'Функция Сложить(А, Б) Экспорт\n  Возврат А + Б;\nКонецФункции',
+    });
+
+    await runEngine();
+    await flush();
+
+    expect(logs).toEqual(['5']);
+    expect(fetchMock.mock.calls.map((call) => decodeURI(String(call[0])))).toEqual([
+      'http://localhost/app/scripts/app.osjs',
+      'http://localhost/app/scripts/lib/Модуль.osjs',
+    ]);
+  });
+
+  it('сохраняет порядок документа при медленной загрузке', async () => {
+    const logs = captureLogs();
+    const window = renderPage([
+      '<script type="text/osjs" src="slow.osjs"></script>',
+      makeScriptBlock('Сообщить("второй");'),
+    ]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(
+              () => resolve(new window.Response('Сообщить("первый");', { status: 200 })),
+              10,
+            );
+          }),
+      ),
+    );
+
+    await runEngine();
+    await flush(50);
+
+    expect(logs).toEqual(['первый', 'второй']);
+  });
+
+  it('ошибка загрузки — console.error, остальные блоки исполняются', async () => {
+    const logs = captureLogs();
+    const errors = captureErrors();
+    const window = renderPage([
+      '<script type="text/osjs" src="missing.osjs"></script>',
+      makeScriptBlock('Сообщить("второй");'),
+    ]);
+    stubFetch(window, {});
+
+    await runEngine();
+    await flush();
+
+    expect(logs).toEqual(['второй']);
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0])).toContain('http://localhost/app/missing.osjs');
+    expect(String(errors[0])).toContain('404');
+  });
+
+  it('некорректный URL — console.error, остальные блоки исполняются', async () => {
+    const logs = captureLogs();
+    const errors = captureErrors();
+    renderPage([
+      '<script type="text/osjs" src="http://["></script>',
+      makeScriptBlock('Сообщить("второй");'),
+    ]);
+
+    await runEngine();
+    await flush();
+
+    expect(logs).toEqual(['второй']);
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0])).toContain('Не удалось загрузить');
+  });
+
+  it('id блока с src регистрирует контекст для data-os-*', async () => {
+    const window = renderPage(
+      ['<script type="text/osjs" id="app" src="app.osjs"></script>'],
+      '<button id="к" data-os-script="app" data-os-click="Счёт = Счёт + 1; Сообщить(Счёт);">+1</button>',
+    );
+    stubFetch(window, {
+      'http://localhost/app/app.osjs': 'Перем Счёт;\nСчёт = 0;',
+    });
+    const logs = captureLogs();
+
+    await runEngine();
+    await flush();
+
+    const button = window.document.getElementById('к') as unknown as HTMLElement;
+    button.click();
+    button.click();
+
+    expect(logs).toEqual(['1', '2']);
+  });
+
+  it('ТекущийСценарий().Источник указывает на внешний файл', async () => {
+    const logs = captureLogs();
+    const window = renderPage(['<script type="text/osjs" src="app.osjs"></script>']);
+    stubFetch(window, {
+      'http://localhost/app/app.osjs': 'Сообщить(ТекущийСценарий().Источник);',
+    });
+
+    await runEngine();
+    await flush();
+
+    expect(logs).toEqual(['http://localhost/app/app.osjs']);
+  });
+
+  it('пустой src — фолбэк на inline-содержимое', async () => {
+    const logs = captureLogs();
+    const window = renderPage([
+      '<script type="text/osjs" src="  ">Сообщить("inline");</script>',
+    ]);
+    const fetchMock = stubFetch(window, {});
+
+    await runEngine();
+    await flush();
+
+    expect(logs).toEqual(['inline']);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
