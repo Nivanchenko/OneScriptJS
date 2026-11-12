@@ -125,7 +125,8 @@ description: "Task list for feature 016 — canonical embedding form <script typ
 ## Phase 7: Polish & Cross-Cutting
 
 - [X] T022 Полная проверка: `pnpm typecheck && pnpm test && pnpm build`; браузерная приёмка
-  `examples/hello.html` (dev/preview или happy-dom-тест); `grep`-инварианты; вывод зафиксировать
+  `examples/hello.html` (dev/preview или happy-dom-тест); `grep`-инварианты; вывод зафиксировать.
+  Ручная приёмка в реальном браузере выполнена владельцем — примеры работают
 - [X] T023 `docs/status.md`: 016 → реализовано, заметки CSP/happy-dom (если подтвердятся);
   `specs/016-osjs-script-tag/spec.md` Status → Implemented; `tasks.md` — все `[X]`
 - [X] T024 Коммит и push в `feat/linter` с сообщением о переходе на script-тег
