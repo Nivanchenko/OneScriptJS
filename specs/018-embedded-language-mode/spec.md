@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-12
 
-**Status**: Implemented (грамматика/тесты/сборка; ручная приёмка UI в VS Code ожидается)
+**Status**: Implemented (грамматика/тесты/сборка + ручная приёмка UI в VS Code)
 
 **Input**: Решение владельца: «делай слой C» — после слоя B (тонкий клиент VS Code)
 добавить embedded language mode для встроенных блоков HTML: VS Code должен считать

@@ -56,10 +56,10 @@ description: "Task list for feature 018 — embedded language mode (TextMate inj
   VS Code-семейство, semantic tokens fallback), отключённый сервер
 - [X] T013 `docs/status.md`, `docs/architecture.md`, spec 018 Status; спеки 015/017 —
   пометка, что слой C выполнен
-- [ ] T014 Ручная приёмка в VS Code (quickstart 018): подсветка/`Ctrl+/`/фолдинг/Emmet/
-  word pattern; `.osjs` и HTML без регрессий; при отключённом сервере грамматика работает.
-  Автоматическая часть (scopes/тесты/сборка) выполнена; UI-часть — за владельцем
-- [ ] T015 Коммит и push
+- [X] T014 Ручная приёмка в VS Code (quickstart 018) выполнена владельцем: подсветка/
+  `Ctrl+/`/фолдинг/Emmet/word pattern; `.osjs` и HTML без регрессий; при отключённом
+  сервере грамматика работает
+- [X] T015 Коммит и push
 
 ## Dependencies & Execution Order
 
