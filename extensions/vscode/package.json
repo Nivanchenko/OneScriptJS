@@ -1,0 +1,84 @@
+{
+  "name": "onescriptjs",
+  "displayName": "OneScriptJS",
+  "description": "OneScriptJS (.osjs): подсветка, диагностика, автодополнение, hover, semantic tokens и переходы через LSP-сервер; блоки script[type=\"text/osjs\"] в HTML — по настройке.",
+  "version": "0.1.0",
+  "publisher": "onescriptjs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Nivanchenko/OneScriptJS"
+  },
+  "engines": {
+    "vscode": "^1.91.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "keywords": [
+    "osjs",
+    "onescriptjs",
+    "bsl",
+    "1c"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:osjs",
+    "onLanguage:html",
+    "onCommand:onescriptjs.restartServer",
+    "onCommand:onescriptjs.showOutput"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "osjs",
+        "aliases": [
+          "OneScriptJS",
+          "osjs"
+        ],
+        "extensions": [
+          ".osjs"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "osjs",
+        "scopeName": "source.osjs",
+        "path": "./syntaxes/osjs.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "onescriptjs.restartServer",
+        "title": "OneScriptJS: Restart Language Server"
+      },
+      {
+        "command": "onescriptjs.showOutput",
+        "title": "OneScriptJS: Show Output"
+      }
+    ],
+    "configuration": {
+      "title": "OneScriptJS",
+      "properties": {
+        "onescriptjs.embeddedInHtml": {
+          "type": "boolean",
+          "default": true,
+          "description": "Обслуживать блоки <script type=\"text/osjs\"> в HTML-документах (embedded-режим LSP-сервера)."
+        },
+        "onescriptjs.trace": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Уровень трассировки LSP-клиента в Output-канале «OneScriptJS»."
+        }
+      }
+    }
+  }
+}

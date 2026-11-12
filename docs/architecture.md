@@ -128,6 +128,9 @@ OneScript — открытая реализация языка, совмести
   `script[type="text/osjs"]` в HTML, `src/lsp/embedded.ts` анализирует блоки тем же
   анализатором и переносит диапазоны в координаты HTML; `.html` не заявляется — сервер
   обслуживает его только если клиент прислал документ.
+- Клиент VS Code — `extensions/vscode/` (спека 017): манифест языка/грамматики, запуск
+  `server.mjs` на Node-рантайме VS Code, HTML по настройке `embeddedInHtml`, сборка
+  `.vsix` (`pnpm build:vscode`). Собственных провайдеров не содержит.
 - `src/node/lsp-server.ts` — stdio-точка входа, сборка `dist/lsp/server.mjs`
   (`vite.lsp.config.ts`, `pnpm build:lsp`). `src/node` — единственное место с Node-API;
   `src/lsp` не импортирует `node:*` (страж `tests/lsp-boundaries.test.ts`).
