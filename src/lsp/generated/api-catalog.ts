@@ -3776,7 +3776,7 @@ export const API_CATALOG = {
           "en": "Version",
           "type": "Строка",
           "access": "read",
-          "description": "Версия движка (в текущей сборке — `0.1.0`)"
+          "description": "Версия движка (в текущей сборке — `0.1.1`)"
         },
         {
           "ru": "ТипПлатформы",

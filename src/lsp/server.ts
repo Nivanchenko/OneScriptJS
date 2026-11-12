@@ -53,7 +53,7 @@ export function registerHandlers(connection: Connection, options: RegisterOption
   };
 
   connection.onInitialize((): InitializeResult => ({
-    serverInfo: { name: 'osjs-lsp', version: '0.1.0' },
+    serverInfo: { name: 'osjs-lsp', version: '0.1.1' },
     capabilities: {
       positionEncoding: 'utf-16',
       textDocumentSync: { openClose: true, change: TextDocumentSyncKind.Full },

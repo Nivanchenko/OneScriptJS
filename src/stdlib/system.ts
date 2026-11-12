@@ -134,7 +134,7 @@ export class BslSystemInfo implements BslObject {
         }
       case 'версия':
       case 'version':
-        return '0.1.0';
+        return '0.1.1';
       case 'типплатформы':
       case 'platformtype':
         return new BslEnumValue('ТипПлатформы', platformType());

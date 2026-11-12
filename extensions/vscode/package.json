@@ -2,7 +2,7 @@
   "name": "onescriptjs",
   "displayName": "OneScriptJS",
   "description": "OneScriptJS (.osjs): подсветка, диагностика, автодополнение, hover, semantic tokens и переходы через LSP-сервер; блоки script[type=\"text/osjs\"] в HTML — по настройке.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "onescriptjs",
   "license": "MIT",
   "repository": {

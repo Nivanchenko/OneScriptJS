@@ -20,7 +20,7 @@ export type { HttpTransport } from './stdlib/http';
 export type { Value } from './runtime/values';
 export type { BslObject } from './runtime/object';
 
-export const ONESCRIPT_VERSION = '0.1.0';
+export const ONESCRIPT_VERSION = '0.1.1';
 
 /** Возвращает версию движка. */
 export function version(): string {
