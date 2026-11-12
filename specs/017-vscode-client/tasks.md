@@ -59,9 +59,9 @@ description: "Task list for feature 017 — thin VS Code client"
   (HTML без грамматической инъекции; `.os` не заявляется; офлайн; Marketplace вне объёма)
 - [X] T015 `docs/status.md` (017 → реализовано, известные ограничения),
   `docs/architecture.md` (слой расширения), spec 017 Status → Implemented
-- [ ] T016 Финальная проверка: `pnpm typecheck && pnpm test && pnpm build && pnpm build:vscode`;
-  содержимое `.vsix` — **автоматическая часть выполнена**; ручная приёмка владельцем
-  (install → проверки quickstart) ещё не выполнена — после неё задача закрывается
+- [X] T016 Финальная проверка: `pnpm typecheck && pnpm test && pnpm build && pnpm build:vscode`;
+  содержимое `.vsix` — автоматическая часть выполнена; ручная приёмка владельцем в GUI VS Code
+  выполнена: hover/`gd`/автодополнение и прочее работают в `.osjs` и во встроенных блоках HTML
 - [X] T017 Коммит и push
 
 ## Deferred (слой C, отдельная работа)
