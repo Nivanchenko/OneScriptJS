@@ -8,6 +8,15 @@ interface Setting {
   description?: string;
 }
 
+interface ManifestGrammar {
+  language?: string;
+  scopeName?: string;
+  path?: string;
+  injectTo?: string[];
+  injectionSelector?: string;
+  embeddedLanguages?: Record<string, string>;
+}
+
 interface Manifest {
   name?: string;
   displayName?: string;
@@ -19,7 +28,7 @@ interface Manifest {
   repository?: unknown;
   contributes?: {
     languages?: Array<{ id?: string; extensions?: string[]; configuration?: string }>;
-    grammars?: Array<{ language?: string; scopeName?: string; path?: string }>;
+    grammars?: ManifestGrammar[];
     commands?: Array<{ command?: string; title?: string }>;
     configuration?: { properties?: Record<string, Setting> };
   };
@@ -38,7 +47,11 @@ const root = JSON.parse(
 ) as RootManifest;
 
 const language = manifest.contributes?.languages?.[0];
-const grammar = manifest.contributes?.grammars?.[0];
+const grammars = manifest.contributes?.grammars ?? [];
+const grammar = grammars[0];
+const injectionGrammar = grammars.find(
+  (item) => item.scopeName === 'osjs.embedded.injection',
+);
 const commandIds = (manifest.contributes?.commands ?? []).map((command) => command.command);
 const settings = manifest.contributes?.configuration?.properties ?? {};
 
@@ -82,6 +95,35 @@ describe('манифест расширения VS Code', () => {
     });
   });
 
+  it('регистрирует инъекционную грамматику для text.html.basic', () => {
+    expect(injectionGrammar).toMatchObject({
+      scopeName: 'osjs.embedded.injection',
+      path: './syntaxes/osjs-embedded.tmLanguage.json',
+      injectTo: ['text.html.basic'],
+      injectionSelector: 'L:text.html.basic - (comment.block, meta.embedded)',
+      embeddedLanguages: { 'meta.embedded.block.osjs': 'osjs' },
+    });
+    // Инъекция не заявляет язык и не подменяет .html.
+    expect(injectionGrammar).not.toHaveProperty('language');
+    expect(grammars.map((item) => item.scopeName)).toEqual([
+      'source.osjs',
+      'osjs.embedded.injection',
+    ]);
+  });
+
+  it('файл инъекционной грамматики совпадает с манифестом', () => {
+    const grammarPath = new URL('../editors/osjs/osjs-embedded.tmLanguage.json', import.meta.url);
+    expect(existsSync(grammarPath)).toBe(true);
+    const injected = JSON.parse(readFileSync(grammarPath, 'utf8')) as {
+      scopeName?: string;
+      injectionSelector?: string;
+      patterns?: Array<{ contentName?: string }>;
+    };
+    expect(injected.scopeName).toBe(injectionGrammar?.scopeName);
+    expect(injected.injectionSelector).toBe(injectionGrammar?.injectionSelector);
+    expect(injected.patterns?.[0]?.contentName).toBe('meta.embedded.block.osjs');
+  });
+
   it('объявляет команды перезапуска и показа Output', () => {
     expect(commandIds).toEqual(
       expect.arrayContaining(['onescriptjs.restartServer', 'onescriptjs.showOutput']),
@@ -106,13 +148,15 @@ describe('сборка расширения', () => {
     ? readFileSync(new URL('../scripts/build-vscode-extension.mjs', import.meta.url), 'utf8')
     : '';
 
-  it('сборщик копирует сервер, грамматику и language-configuration', () => {
+  it('сборщик копирует сервер, грамматики и language-configuration', () => {
     expect(script).not.toBe('');
     expect(script).toContain('dist/lsp/server.mjs');
     expect(script).toContain('editors/osjs/osjs.tmLanguage.json');
+    expect(script).toContain('editors/osjs/osjs-embedded.tmLanguage.json');
     expect(script).toContain('editors/osjs/language-configuration.json');
     expect(script).toContain('server/server.mjs');
     expect(script).toContain('syntaxes/osjs.tmLanguage.json');
+    expect(script).toContain('syntaxes/osjs-embedded.tmLanguage.json');
   });
 
   it('сборщик собирает LSP, бандлит extension.ts и упаковывает .vsix', () => {

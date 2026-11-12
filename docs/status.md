@@ -125,9 +125,10 @@ types, enums, format, tasks/фоновые задания) → `src/browser/ones
 | `015-embedded-osjs-html` | Встроенный `.osjs` в HTML: редакторные инструменты внутри `<script type="text/osjs">` («гость в HTML»); слой A (серверный режим) реализован, B/C после клиента VS Code | слой A реализован |
 | `016-osjs-script-tag` | Каноническая форма встраивания — `<script type="text/osjs">`; удаление прежней формы, raw-text семантика, диагностика `</script>` (OSJS4001) | реализовано (runtime + тесты + миграция; правила OSJS4001/4002 — в 015) |
 | `017-vscode-client` | Тонкий клиент VS Code: язык `osjs` + грамматика, запуск LSP-сервера, HTML-блоки по настройке, локальный `.vsix` | реализовано (сборка/тесты + ручная приёмка в GUI VS Code) |
+| `018-embedded-language-mode` | Embedded language mode в VS Code: TextMate-инъекция `<script type="text/osjs">` (подсветка/комментарии/скобки/фолдинг/word pattern) | реализовано (грамматика/тесты/сборка; ручная приёмка в VS Code ожидается) |
 
 Для незавершённых спек следующий шаг — `/speckit-plan` или `/speckit-tasks` в её каталоге;
-реализованы 001, 008, 009, 010, 011, 012, 013, 014, 016 и 017; 015 — слой A (серверный
+реализованы 001, 008, 009, 010, 011, 012, 013, 014, 016, 017 и 018; 015 — слой A (серверный
 embedded-режим).
 
 **Редакторные инструменты для `.osjs`** реализованы по спеке
@@ -182,7 +183,22 @@ Node-рантайме VS Code и по настройке `onescriptjs.embeddedIn
 **C**: грамматическая инъекция `<script type="text/osjs">`/embedded language mode.
 Сборка `.vsix` требует Node.js >= 22 (упаковщик); рантайму нужен только VS Code.
 
+**Слой C — embedded language mode — реализован** по спеке
+[`specs/018-embedded-language-mode/spec.md`](../specs/018-embedded-language-mode/spec.md):
+TextMate-инъекция `editors/osjs/osjs-embedded.tmLanguage.json` размечает содержимое
+`script[type="text/osjs"]` как `meta.embedded.block.osjs` и включает `source.osjs`;
+`embeddedLanguages`-мэппинг на язык `osjs` даёт в регионе BSL-комментарии/скобки/word
+pattern/фолдинг. Вне блока — HTML без изменений, `.osjs` не тронут; работает и без
+LSP-сервера. Проверка: `pnpm test` (838 тестов, включая scope-тесты на вендоренной
+HTML-грамматике VS Code 1.146.0) и `pnpm build:vscode` (`.vsix` 11 файлов, обе
+грамматики внутри). **Ручная приёмка в GUI VS Code ожидается** (T014): `Ctrl+/`, фолдинг
+`#Область`, Emmet/word pattern — специфичны для UI и проверяются владельцем.
+
 ## Известные пробелы
+- VS Code embedded language mode (спека 018): ручная приёмка UI не выполнялась (грамматика/
+  scopes и сборка проверены автоматически); `Ctrl+/`/фолдинг/Emmet зависят от версии VS Code
+  и проверяются вручную; многострочный `type`-атрибут тега не поддерживается (TextMate
+  построчный); работает только в VS Code-семействе (остальные — semantic tokens).
 - VS Code клиент (спека 017): ручная проверка в GUI пройдена (`.osjs` и HTML-блоки); `.vsix`
   не подписан и не публикуется в Marketplace; сборка расширения требует Node.js >= 22
   (`@vscode/vsce`); HTML-подсветка — только semantic tokens (грамматической инъекции нет);

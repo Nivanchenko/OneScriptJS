@@ -256,6 +256,9 @@ VS Code работает; удаление расширения чистое.
 
 ## Out of Scope
 
+> Слой C (грамматическая инъекция/embedded language mode) реализован отдельно —
+> [`specs/018-embedded-language-mode`](../018-embedded-language-mode/spec.md).
+
 - Публикация в VS Code Marketplace, автообновление, каналы релизов (только локальный `.vsix`).
 - Грамматическая инъекция `<script type="text/osjs">` и embedded language mode (слой C;
   может стать отдельной спекой/фазой после B).

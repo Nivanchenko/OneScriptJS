@@ -48,6 +48,17 @@
         "language": "osjs",
         "scopeName": "source.osjs",
         "path": "./syntaxes/osjs.tmLanguage.json"
+      },
+      {
+        "scopeName": "osjs.embedded.injection",
+        "path": "./syntaxes/osjs-embedded.tmLanguage.json",
+        "injectTo": [
+          "text.html.basic"
+        ],
+        "injectionSelector": "L:text.html.basic - (comment.block, meta.embedded)",
+        "embeddedLanguages": {
+          "meta.embedded.block.osjs": "osjs"
+        }
       }
     ],
     "commands": [

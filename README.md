@@ -416,8 +416,11 @@ code --install-extension dist/vscode/onescriptjs-0.1.0.vsix --force
 `*.osjs` получает подсветку, диагностику, автодополнение, hover, semantic tokens,
 Outline и переходы. HTML со `<script type="text/osjs">` обслуживается по настройке
 `onescriptjs.embeddedInHtml` (по умолчанию включена); `.os` расширение не заявляет.
-Грамматической инъекции/embedded language mode для HTML пока нет (следующий слой) —
-подсветка блоков идёт через semantic tokens сервера. Сборка `.vsix` требует Node.js >= 22
+В HTML-блоках работает **embedded language mode**: содержимое
+`<script type="text/osjs">` подсвечивается полной BSL-грамматикой, `Ctrl+/` даёт `//`,
+`#Область`/`#Если` складываются, скобки/кавычки и word pattern — как в `.osjs`
+(VS Code-семейство; в других редакторах — semantic tokens). Грамматика работает
+и без запущенного LSP-сервера. Сборка `.vsix` требует Node.js >= 22
 (упаковщик `@vscode/vsce`); для работы расширения нужен только VS Code.
 
 Пример для ручной проверки — [`examples/editor.osjs`](examples/editor.osjs),

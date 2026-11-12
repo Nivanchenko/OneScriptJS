@@ -60,11 +60,13 @@ run(pnpm, ['build:lsp'], { shell: process.platform === 'win32' });
 // 2. Источники, которые обязаны существовать до staging.
 const serverSource = join(ROOT, 'dist/lsp/server.mjs');
 const grammarSource = join(ROOT, 'editors/osjs/osjs.tmLanguage.json');
+const embeddedGrammarSource = join(ROOT, 'editors/osjs/osjs-embedded.tmLanguage.json');
 const languageConfigSource = join(ROOT, 'editors/osjs/language-configuration.json');
 const noticeSource = join(ROOT, 'editors/osjs/NOTICE.md');
 const readmeSource = join(EXTENSION_DIR, 'README.md');
 requireFile(serverSource, 'сначала должна пройти сборка `pnpm build:lsp`');
 requireFile(grammarSource, 'нет TextMate-грамматики для .osjs');
+requireFile(embeddedGrammarSource, 'нет инъекционной грамматики для <script type="text/osjs">');
 requireFile(languageConfigSource, 'нет language-configuration для .osjs');
 requireFile(noticeSource, 'нет NOTICE с авторством грамматики');
 requireFile(readmeSource, 'нет README расширения');
@@ -94,6 +96,7 @@ copyFileSync(join(ROOT, 'LICENSE'), join(STAGING, 'LICENSE'));
 copyFileSync(noticeSource, join(STAGING, 'NOTICE.md'));
 copyFileSync(serverSource, join(STAGING, 'server/server.mjs'));
 copyFileSync(grammarSource, join(STAGING, 'syntaxes/osjs.tmLanguage.json'));
+copyFileSync(embeddedGrammarSource, join(STAGING, 'syntaxes/osjs-embedded.tmLanguage.json'));
 copyFileSync(languageConfigSource, join(STAGING, 'language-configuration.json'));
 
 // 5. Упаковка из staging: node_modules и исходники в .vsix не попадают.
