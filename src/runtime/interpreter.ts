@@ -34,6 +34,8 @@ import { TimeSlicer, drive, isThenable, yieldMaybe, yieldToHost } from './async'
 
 interface Ctx {
   methods: Map<string, MethodDeclaration>;
+  /** Область, в которой объявлен метод; нужна динамическим методам из `Выполнить`. */
+  methodScopes: Map<string, Scope>;
   moduleScope: Scope;
   moduleVars: Set<string>;
   exportedVars: Set<string>;
@@ -99,6 +101,7 @@ export class Interpreter {
     const fork = new Interpreter(this.env);
     fork.moduleCtx = {
       methods: source.methods,
+      methodScopes: source.methodScopes,
       moduleScope: source.moduleScope,
       moduleVars: source.moduleVars,
       exportedVars: source.exportedVars,
@@ -115,6 +118,7 @@ export class Interpreter {
   static evaluate(expr: Expression): Value {
     const ctx: Ctx = {
       methods: new Map(),
+      methodScopes: new Map(),
       moduleScope: new Scope(),
       moduleVars: new Set(),
       exportedVars: new Set(),
@@ -135,6 +139,7 @@ export class Interpreter {
   run(program: Program): MaybePromise<void> {
     const ctx: Ctx = {
       methods: new Map(),
+      methodScopes: new Map(),
       moduleScope: new Scope(),
       moduleVars: new Set(),
       exportedVars: new Set(),
@@ -174,7 +179,7 @@ export class Interpreter {
     if (!ctx) throw new Error('Модуль ещё не выполнен');
     const method = ctx.methods.get(key(name));
     if (!method) throw new Error(`Метод '${name}' не найден`);
-    const localScope = new Scope(ctx.moduleScope);
+    const localScope = new Scope(ctx.methodScopes.get(key(name)) ?? ctx.moduleScope);
     for (let i = 0; i < method.params.length; i++) {
       const p = method.params[i]!;
       if (i < values.length) {
@@ -256,7 +261,7 @@ export class Interpreter {
 
   private *invokeAsyncGen(method: MethodDeclaration, values: Value[]): BslGenerator<Value> {
     const ctx = this.requireCtx();
-    const localScope = new Scope(ctx.moduleScope);
+    const localScope = new Scope(ctx.methodScopes.get(key(method.name)) ?? ctx.moduleScope);
     for (let i = 0; i < method.params.length; i++) {
       const p = method.params[i]!;
       let value: Value;
@@ -751,7 +756,7 @@ export class Interpreter {
     scope: Scope,
     ctx: Ctx,
   ): BslGenerator<Value> {
-    const localScope = new Scope(ctx.moduleScope);
+    const localScope = new Scope(ctx.methodScopes.get(key(method.name)) ?? ctx.moduleScope);
     for (let i = 0; i < method.params.length; i++) {
       const p = method.params[i]!;
       const argExpr = argExprs[i];
@@ -829,7 +834,7 @@ export class Interpreter {
     return yield* this.eval(call.args[0]!, scope, ctx);
   }
 
-  /** `Выполнить строка` — исполняет операторы в текущей области видимости. */
+  /** `Выполнить строка` — исполняет операторы в области текущего контекста. */
   private *execDynamic(source: string, scope: Scope, ctx: Ctx): BslGenerator<void> {
     let program: Program;
     try {
@@ -837,14 +842,25 @@ export class Interpreter {
     } catch (e) {
       throw new BslRuntimeError(e instanceof Error ? e.message : String(e));
     }
-    // объявленные в динамическом коде методы попадают в модуль
+    // Фрагмент исполняется как отдельный модуль (как `Выполнить` в OneScript):
+    // его `Перем` — модульные переменные фрагмента, а объявленные в нём методы
+    // видят эту область. Родитель — текущая область, поэтому локальные
+    // переменные вызывающего кода по-прежнему доступны.
+    const dynamicScope = new Scope(scope);
     const executable: Statement[] = [];
     for (const stmt of program.body) {
-      if (stmt.kind === 'MethodDeclaration') ctx.methods.set(key(stmt.name), stmt);
-      else executable.push(stmt);
+      if (stmt.kind === 'MethodDeclaration') {
+        const name = key(stmt.name);
+        ctx.methods.set(name, stmt);
+        ctx.methodScopes.set(name, dynamicScope);
+      } else if (stmt.kind === 'VariableDeclaration') {
+        for (const name of stmt.names) dynamicScope.declare(name);
+      } else {
+        executable.push(stmt);
+      }
     }
     try {
-      yield* this.execGotoBlock(executable, scope, ctx);
+      yield* this.execGotoBlock(executable, dynamicScope, ctx);
     } catch (e) {
       if (e instanceof ReturnSignal) {
         throw new BslRuntimeError('Оператор "Возврат" может использоваться только внутри метода');
@@ -855,7 +871,7 @@ export class Interpreter {
 
   private setVariable(name: string, value: Value, scope: Scope, ctx: Ctx): void {
     const binding = scope.findBinding(key(name));
-    if (binding instanceof Ref) {
+    if (binding !== undefined) {
       binding.set(value);
       return;
     }

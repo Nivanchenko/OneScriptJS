@@ -150,6 +150,25 @@ describe('демо-страницы examples/', () => {
     expect(window.document.getElementById('статус')?.textContent).toBe('Выполнено без ошибок');
   });
 
+  it('sandbox.html: Перем видна процедуре, объявленной в том же запуске', async () => {
+    const window = await loadDemo('sandbox.html');
+    const code = window.document.getElementById('код') as unknown as HTMLTextAreaElement;
+    const run = window.document.getElementById('выполнить') as unknown as HTMLElement;
+    code.value = [
+      'Перем Н;',
+      'Процедура ИзменитьН()',
+      '  Н = 55;',
+      'КонецПроцедуры',
+      'Н = 1;',
+      'ИзменитьН();',
+      'Сообщить(Н);',
+    ].join('\n');
+
+    run.click();
+
+    expect(window.document.getElementById('журнал')?.textContent).toContain('55');
+  });
+
   it('sandbox.html: ошибка выполнения показывается в журнале и не роняет страницу', async () => {
     const window = await loadDemo('sandbox.html');
     const code = window.document.getElementById('код') as unknown as HTMLTextAreaElement;

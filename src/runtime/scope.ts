@@ -18,18 +18,26 @@ export class Ref {
 
 /** Область видимости переменных. Имена регистронезависимы (как в 1С). */
 export class Scope {
-  private readonly vars = new Map<string, Value | Ref>();
+  // Значения лежат в ячейках-Ref: присваивание из вложенной области (например,
+  // из `Выполнить`) должно менять исходную переменную, а не создавать тень.
+  private readonly vars = new Map<string, Ref>();
 
   constructor(private readonly parent?: Scope) {}
 
   get(name: string): Value {
     const binding = this.vars.get(name.toLowerCase());
-    if (binding !== undefined) return binding instanceof Ref ? binding.get() : binding;
+    if (binding !== undefined) return binding.get();
     return this.parent?.get(name);
   }
 
+  /** Присваивает значение в этой области (создаёт или перезаписывает привязку). */
   set(name: string, value: Value): void {
-    this.vars.set(name.toLowerCase(), value);
+    this.vars.set(name.toLowerCase(), Scope.cell(value));
+  }
+
+  /** Объявляет переменную: видна в цепочке областей даже при значении `Неопределено`. */
+  declare(name: string): void {
+    this.vars.set(name.toLowerCase(), Scope.cell(undefined));
   }
 
   /** Связывает имя со ссылкой на переменную (передача по ссылке). */
@@ -37,10 +45,18 @@ export class Scope {
     this.vars.set(name.toLowerCase(), ref);
   }
 
-  /** Ищет привязку по имени (Ref или значение), обходя цепочку. */
-  findBinding(name: string): Value | Ref | undefined {
-    const binding = this.vars.get(name.toLowerCase());
-    if (binding !== undefined) return binding;
-    return this.parent?.findBinding(name);
+  /** Ищет привязку по имени (Ref), обходя цепочку. */
+  findBinding(name: string): Ref | undefined {
+    return this.vars.get(name.toLowerCase()) ?? this.parent?.findBinding(name);
+  }
+
+  private static cell(value: Value): Ref {
+    let current = value;
+    return new Ref(
+      () => current,
+      (next) => {
+        current = next;
+      },
+    );
   }
 }
