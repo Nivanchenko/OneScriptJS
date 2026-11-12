@@ -1,7 +1,9 @@
 /**
  * Браузерная точка входа. Исполняет BSL из HTML data blocks
  * `<script type="text/osjs">`: содержимое такого блока — raw text, поэтому
- * `<`, `>` и `&` не требуют HTML-экранирования.
+ * `<`, `>` и `&` не требуют HTML-экранирования. Блок с атрибутом `src`
+ * скачивает внешний `.osjs` (URL относительно `document.baseURI`) и исполняет
+ * его вместо inline-содержимого.
  *
  * Вывод `Сообщить()` идёт через стандартную библиотеку в `console.log`.
  * Дополнительно регистрируется объект `Документ` для работы с DOM.
@@ -39,16 +41,49 @@ function describeError(error: unknown): string {
     : message;
 }
 
+/**
+ * Источник блока: inline-текст или внешний `.osjs` по `src` (URL относительно
+ * `document.baseURI`). `src` побеждает inline-содержимое; пустой `src` — inline.
+ */
+async function blockSource(
+  block: HTMLScriptElement,
+): Promise<{ source: string; url?: string }> {
+  const src = block.getAttribute('src');
+  if (src === null || src.trim() === '') return { source: block.textContent ?? '' };
+
+  let url: string;
+  try {
+    url = new URL(src, block.ownerDocument.baseURI).href;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Не удалось загрузить '${src}': ${reason}`);
+  }
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return { source: await response.text(), url };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Не удалось загрузить '${url}': ${reason}`);
+  }
+}
+
 /** Свежий контекст на блок; ошибка блока уходит в `console.error`, не прерывая остальные. */
 async function executeBlock(block: HTMLScriptElement): Promise<void> {
   const doc = block.ownerDocument;
-  const source = block.textContent ?? '';
   try {
+    const { source, url } = await blockSource(block);
     const ctx = createBrowserGlobalContext();
     // Контекст нужен декларативным обработчикам (`data-os-*`) в этом блоке.
     registerScriptContext(block.id || null, ctx);
-    const modules = await preloadModuleSources(source, doc.baseURI);
-    await run(source, ctx, { basePath: doc.baseURI, modules, resolve: resolveUrlPath });
+    const entryUrl = url ?? doc.baseURI;
+    const modules = await preloadModuleSources(source, entryUrl);
+    await run(source, ctx, {
+      basePath: entryUrl,
+      ...(url === undefined ? {} : { path: url }),
+      modules,
+      resolve: resolveUrlPath,
+    });
     scheduleDeclarativeBinding();
   } catch (error) {
     console.error(describeError(error));
