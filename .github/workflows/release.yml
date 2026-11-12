@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # pnpm ставим до setup-node: его cache: pnpm требует pnpm в PATH.
+      # version не указываем — берётся из packageManager в package.json.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # Сборка .vsix требует Node >= 22 — поэтому node-version выше 22.
+      - name: Build VS Code extension
+        run: pnpm build:vscode
+
+      - name: Package artifacts
+        shell: bash
+        # В архив кладём только рантайм-артефакты, без demo-html и прочего из dist/.
+        run: |
+          set -euo pipefail
+          # Версия без префикса v — так имена всех ассетов совпадают с версией .vsix.
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p "$RUNNER_TEMP/release"
+          tar -czf "$RUNNER_TEMP/release/onescriptjs-$version.tar.gz" \
+            -C dist onescript.js onescript.js.map node cli.mjs lsp
+          cp dist/onescript.js "$RUNNER_TEMP/release/onescriptjs-$version.js"
+          cp dist/vscode/*.vsix "$RUNNER_TEMP/release/"
+          cd "$RUNNER_TEMP/release"
+          # Явные маски, чтобы SHA256SUMS не попал в собственный хэш.
+          sha256sum ./*.tar.gz ./*.js ./*.vsix > SHA256SUMS
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        # Идемпотентность: перезапуск по тому же тегу обновляет ассеты, а не падает.
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP"/release/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "OneScriptJS $GITHUB_REF_NAME" \
+              --generate-notes \
+              "$RUNNER_TEMP"/release/*
+          fi

@@ -7,8 +7,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 const BUNDLE = fileURLToPath(new URL('./dist/onescript.js', import.meta.url));
 
 /**
- * Dev-сервер: примеры подключают `<script src="/onescript.js">`, а собранный бандл
- * лежит в `dist/`. Отдаём его по требуемому пути, чтобы `pnpm dev` работал без
+ * Dev-сервер: примеры подключают движок относительной ссылкой
+ * `<script src="onescript.js">` — так они работают и в `pnpm dev`, и на GitHub
+ * Pages под префиксом `/OneScriptJS/`. Браузер разрешает её относительно
+ * страницы, поэтому для `/examples/hello.html` запрос придёт на
+ * `/examples/onescript.js`. Собранный бандл лежит в `dist/`; отдаём его по любому
+ * пути, оканчивающемуся на `/onescript.js`, чтобы `pnpm dev` работал без
  * копирования файлов. Требуется предварительный `pnpm build:browser`
  * (при изменении движка — пересобрать и обновить страницу).
  */
@@ -18,8 +22,8 @@ function serveBuiltBundle(): Plugin {
     apply: 'serve',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        const url = (req.url ?? '').split('?')[0];
-        if (url !== '/onescript.js') return next();
+        const url = (req.url ?? '').split('?')[0] ?? '';
+        if (!url.endsWith('/onescript.js')) return next();
         if (!existsSync(BUNDLE) || !statSync(BUNDLE).isFile()) {
           res.statusCode = 404;
           res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -96,7 +100,7 @@ function demoHttpApi(): Plugin {
 }
 
 // Браузерная сборка: единый скрипт onescript.js, подключаемый как
-// <script src="/onescript.js"></script> и регистрирующий <one-script>.
+// <script src="onescript.js"></script> и регистрирующий <one-script>.
 export default defineConfig({
   plugins: [serveBuiltBundle(), demoHttpApi()],
   build: {

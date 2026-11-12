@@ -82,6 +82,7 @@ OneScriptJS/
 │   └── lsp/                ← инструменты .osjs: анализ, диагностика, подсказки
 ├── editors/osjs/           ← TextMate-грамматика, конфигурация языка, метаданные
 ├── extensions/vscode/      ← тонкий клиент VS Code (грамматика + LSP-клиент, .vsix)
+├── .github/workflows/      ← GitHub Actions: pages.yml (демо на Pages), release.yml (артефакты по тегу v*)
 ├── scripts/                ← check-api-docs.mjs, build-api-catalog.mjs, build-vscode-extension.mjs, …
 ├── tests/                  ← юнит-тесты Vitest
 ├── examples/               ← HTML-примеры (hello.html — приёмочный сценарий)
@@ -148,6 +149,12 @@ OneScriptJS/
     тестовых фикстурах использовать `.osjs`. `.os` упоминается только там, где
     речь о ванильном C#-OneScript или об эталонном корпусе `reference/`
     ([specs/013-osjs-format](specs/013-osjs-format/spec.md)).
+11. **Примеры — с относительными ссылками** — `examples/*.html` подключают движок
+    как `<script src="onescript.js">`, не `/onescript.js`: страницы публикуются на
+    GitHub Pages project-site под префиксом `/OneScriptJS/`
+    (`.github/workflows/pages.yml`). Dev-сервер отдаёт бандл для любого пути,
+    оканчивающегося на `/onescript.js` (плагин `serveBuiltBundle` в
+    `vite.config.ts`).
 
 ## 7. Философия разработки: «ленивый сеньор» (Ponytail)
 

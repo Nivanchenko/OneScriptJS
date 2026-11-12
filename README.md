@@ -547,7 +547,9 @@ pnpm oscript script.osjs
 
 Открываются через `pnpm dev` (`http://localhost:5173/examples/<страница>.html`) или
 `pnpm demo` (`http://localhost:4173`); мок-бэкенд `GET /api/demo` и `POST /api/echo`
-работает в обоих режимах.
+работает в обоих режимах. Опубликованная демо-версия —
+<https://nivanchenko.github.io/OneScriptJS/> (см. [CI/CD](#cicd-github-actions)); на
+статическом хостинге мок-API недоступен.
 
 | Страница | Что демонстрирует |
 |---|---|
@@ -585,7 +587,9 @@ pnpm demo            # сборка + примеры в dist/ + preview, http://
 ```
 
 `pnpm dev` требует предварительного `pnpm build:browser`: сервер отдаёт уже собранный
-`dist/onescript.js` по пути `/onescript.js`. Правили движок (`src/`) — пересоберите бандл;
+`dist/onescript.js` для любого пути, оканчивающегося на `/onescript.js` (примеры
+подключают его относительной ссылкой, поэтому со страницы `/examples/hello.html` браузер
+запрашивает `/examples/onescript.js`). Правили движок (`src/`) — пересоберите бандл;
 правили HTML — достаточно обновить страницу. `pnpm demo` выполняет `vite build`, копирует
 `examples/*.html` и `examples/lib/` в `dist/` (`scripts/copy-examples.mjs`) и поднимает
 preview с тем же мок-API.
@@ -594,6 +598,41 @@ preview с тем же мок-API.
 [`docs/reference.md`](docs/reference.md): справочник должен отражать текущий `src/`
 (правило в [`AGENTS.md`](AGENTS.md#6-правила-и-конвенции)). Проверить синхронизацию:
 `pnpm check:docs` (падает, если имя API из `src/` не упомянуто в справочнике).
+
+## CI/CD (GitHub Actions)
+
+| Workflow | Когда запускается | Что делает |
+|---|---|---|
+| [`.github/workflows/pages.yml`](.github/workflows/pages.yml) | push в `master`, вручную (`workflow_dispatch`) | собирает браузерный бандл и примеры, публикует демо на GitHub Pages |
+| [`.github/workflows/release.yml`](.github/workflows/release.yml) | push тега `v*` | полная сборка и GitHub Release с артефактами |
+
+**Демо на GitHub Pages.** Один раз включите в репозитории *Settings → Pages →
+Build and deployment → Source* значение **GitHub Actions**. После этого каждый push
+в `master` обновляет страницу <https://nivanchenko.github.io/OneScriptJS/>. Pages —
+статический хостинг: мок-API `GET /api/demo` и `POST /api/echo` там не работает,
+поэтому [`http.html`](examples/http.html) рассчитан на `pnpm dev`/`pnpm demo`.
+
+**Релиз.** Артефакты собираются по тегу:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+К GitHub Release прикладываются (`<версия>` — тег без префикса `v`: для `v0.1.0`
+это `0.1.0`):
+
+- `onescriptjs-<версия>.tar.gz` — содержимое `dist/`: браузерный бандл, Node-библиотека
+  с `.d.ts`, CLI `cli.mjs`, LSP-сервер;
+- `onescriptjs-<версия>.js` — браузерный бандл отдельным файлом (`<script src="onescript.js">`);
+- `onescriptjs-<версия>.vsix` — расширение VS Code;
+- `SHA256SUMS` — контрольные суммы.
+
+Версия `.vsix` берётся из `extensions/vscode/package.json`, поэтому держите версии в
+корневом `package.json` и в манифесте расширения равными тегу без `v`.
+
+Локальный аналог релизной сборки — `pnpm build && pnpm build:vscode`; для `.vsix`
+нужен Node >= 22 (как в workflow).
 
 ## Ограничения
 
