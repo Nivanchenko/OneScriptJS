@@ -361,28 +361,50 @@ function tokenEntries(analysis: Analysis): TokenEntry[] {
   return entries;
 }
 
+/** Декодированный токен подсветки: координаты документа + тип из легенды. */
+export interface DecodedSemanticToken {
+  line: number;
+  startChar: number;
+  length: number;
+  tokenType: SemanticTokenType;
+  modifiers: number;
+}
+
 /**
- * Semantic tokens в формате LSP: дельта-кодированный массив 5 ints/token
- * (deltaLine, deltaStartChar, length, tokenType, tokenModifiers).
+ * Токены анализа в координатах документа (без дельта-кодирования) — сырьё для
+ * переноса в HTML-координаты встроенных блоков.
  */
-export function semanticTokens(analysis: Analysis): number[] {
+export function semanticTokenList(analysis: Analysis): DecodedSemanticToken[] {
   const tokens = analysis.tokens;
   const last = tokens[tokens.length - 1];
   const lineCount = Math.max(1, last?.endLine ?? 1);
   if (lineCount > MAX_SEMANTIC_TOKEN_LINES) return [];
 
-  const sorted = tokenEntries(analysis).sort(
-    (a, b) => a.line - b.line || a.start - b.start,
-  );
+  return tokenEntries(analysis)
+    .sort((a, b) => a.line - b.line || a.start - b.start)
+    .map((entry) => ({
+      line: entry.line,
+      startChar: entry.start,
+      length: entry.length,
+      tokenType: entry.type,
+      modifiers: 0,
+    }));
+}
 
-  // Пересечения запрещены контрактом; после сортировки отбрасываем наложения.
-  const nonOverlapping: TokenEntry[] = [];
+/**
+ * Semantic tokens в формате LSP: дельта-кодированный массив 5 ints/token
+ * (deltaLine, deltaStartChar, length, tokenType, tokenModifiers).
+ * Вход сортируется; наложения отбрасываются (контракт запрещает пересечения).
+ */
+export function encodeSemanticTokens(tokens: readonly DecodedSemanticToken[]): number[] {
+  const sorted = [...tokens].sort((a, b) => a.line - b.line || a.startChar - b.startChar);
+  const nonOverlapping: DecodedSemanticToken[] = [];
   for (const entry of sorted) {
     const previous = nonOverlapping[nonOverlapping.length - 1];
     if (
       previous !== undefined &&
       previous.line === entry.line &&
-      entry.start < previous.start + previous.length
+      entry.startChar < previous.startChar + previous.length
     ) {
       continue;
     }
@@ -393,13 +415,18 @@ export function semanticTokens(analysis: Analysis): number[] {
   let previousLine = 0;
   let previousStart = 0;
   for (const entry of nonOverlapping) {
-    const typeIndex = TYPE_INDEX.get(entry.type);
+    const typeIndex = TYPE_INDEX.get(entry.tokenType);
     if (typeIndex === undefined) continue;
     const deltaLine = entry.line - previousLine;
-    const deltaStart = deltaLine === 0 ? entry.start - previousStart : entry.start;
-    data.push(deltaLine, deltaStart, entry.length, typeIndex, 0);
+    const deltaStart = deltaLine === 0 ? entry.startChar - previousStart : entry.startChar;
+    data.push(deltaLine, deltaStart, entry.length, typeIndex, entry.modifiers);
     previousLine = entry.line;
-    previousStart = entry.start;
+    previousStart = entry.startChar;
   }
   return data;
+}
+
+/** Semantic tokens `.osjs` (поведение 014 не меняется). */
+export function semanticTokens(analysis: Analysis): number[] {
+  return encodeSemanticTokens(semanticTokenList(analysis));
 }

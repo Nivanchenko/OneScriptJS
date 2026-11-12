@@ -124,6 +124,10 @@ OneScript — открытая реализация языка, совмести
 - `src/lsp/analysis.ts` — конвейер толерантных лексера/препроцессора/парсера, таблицы
   символов и сбор диагностик; `diagnostics.ts`, `completion.ts`, `hover.ts`,
   `semantic-tokens.ts`, `symbols.ts`, `document.ts`, `server.ts` (`registerHandlers`).
+- Embedded-режим (спека 015, слой A): `src/lsp/html-blocks.ts` находит
+  `script[type="text/osjs"]` в HTML, `src/lsp/embedded.ts` анализирует блоки тем же
+  анализатором и переносит диапазоны в координаты HTML; `.html` не заявляется — сервер
+  обслуживает его только если клиент прислал документ.
 - `src/node/lsp-server.ts` — stdio-точка входа, сборка `dist/lsp/server.mjs`
   (`vite.lsp.config.ts`, `pnpm build:lsp`). `src/node` — единственное место с Node-API;
   `src/lsp` не импортирует `node:*` (страж `tests/lsp-boundaries.test.ts`).
