@@ -122,11 +122,14 @@ types, enums, format, tasks/фоновые задания) → `src/browser/ones
 | `012-async-await` | Асинхронные методы: `Асинх`/`Ждать`, `Обещание` (поверх фоновых заданий) | реализовано |
 | `013-osjs-format` | Формат `.osjs` — отделение от ванильного OneScript; `.os` — чужой формат, не блокируется | реализовано |
 | `014-osjs-editor-tooling` | Редакторные инструменты `.osjs`: грамматика/описание языка и LSP-сервер (диагностика, подсказки, semantic tokens, навигация); расширение VS Code — позже | реализовано |
-| `015-embedded-osjs-html` | Встроенный `.osjs` в HTML: редакторные инструменты внутри `<script type="text/osjs">` («гость в HTML»); зависит от 014, 016 и клиента VS Code | spec |
+| `015-embedded-osjs-html` | Встроенный `.osjs` в HTML: редакторные инструменты внутри `<script type="text/osjs">` («гость в HTML»); слой A (серверный режим) реализован, B/C после клиента VS Code | слой A реализован |
 | `016-osjs-script-tag` | Каноническая форма встраивания — `<script type="text/osjs">`; удаление прежней формы, raw-text семантика, диагностика `</script>` (OSJS4001) | реализовано (runtime + тесты + миграция; правила OSJS4001/4002 — в 015) |
+| `017-vscode-client` | Тонкий клиент VS Code: язык `osjs` + грамматика, запуск LSP-сервера, HTML-блоки по настройке, локальный `.vsix` | реализовано (сборка/тесты + ручная приёмка в GUI VS Code) |
+| `018-embedded-language-mode` | Embedded language mode в VS Code: TextMate-инъекция `<script type="text/osjs">` (подсветка/комментарии/скобки/фолдинг/word pattern) | реализовано (грамматика/тесты/сборка + ручная приёмка в GUI VS Code) |
 
 Для незавершённых спек следующий шаг — `/speckit-plan` или `/speckit-tasks` в её каталоге;
-реализованы 001, 008, 009, 010, 011, 012, 013, 014 и 016.
+реализованы 001, 008, 009, 010, 011, 012, 013, 014, 016, 017 и 018; 015 — слой A (серверный
+embedded-режим).
 
 **Редакторные инструменты для `.osjs`** реализованы по спеке
 [`specs/014-osjs-editor-tooling/spec.md`](../specs/014-osjs-editor-tooling/spec.md):
@@ -155,20 +158,62 @@ in-process и smoke собранного сервера) и `pnpm build`; **ру
 мигрированные browser-suite'ы, а также демо-страницы `examples/`); **ручная проверка в
 реальном браузере выполнена владельцем** — примеры работают на новой форме.
 
-Следующая работа — **редакторные инструменты для встроенных блоков HTML**:
-[`specs/015-embedded-osjs-html/spec.md`](../specs/015-embedded-osjs-html/spec.md) (Draft;
-зависит от 016 и тонкого клиента VS Code). Модель «гость в HTML»: подсветка/диагностика/
-подсказки/токены/переходы только внутри script-блоков, `.html` остаётся у HTML-инструментов;
-правила `OSJS4001` (Error для `</script>`) и `OSJS4002` (Warning для `<script`/`<!--`) —
-контракт 016, реализация в 015. План и задачи 015 не начаты.
+**Встроенный `.osjs` в HTML — слой A реализован** по спеке
+[`specs/015-embedded-osjs-html/spec.md`](../specs/015-embedded-osjs-html/spec.md)
+(«гость в HTML»): `src/lsp/html-blocks.ts` находит `script[type="text/osjs"]` в HTML,
+`src/lsp/embedded.ts` анализирует блоки анализатором 014 и переносит диапазоны в координаты
+HTML; сервер по `languageId: html` отдаёт диагностику (включая `OSJS4001` Error для обрыва
+`</script>` и `OSJS4002` Warning для `<script`/`<!--`), completion/hover/definition и
+semantic tokens — только внутри блоков, `.html` не заявляется и вне блоков молчит.
+Проверка: `pnpm test` (779 тестов, включая html-blocks/embedded/protocol) и `pnpm build`;
+headless-проверка в Neovim 0.12 пройдена: mapped-диагностика в HTML-координатах,
+`OSJS4001` для обрыва `</script>`, semantic tokens и completion (`Сообщить`) внутри блоков.
+**Ручная проверка в GUI Neovim выполнена владельцем полностью**: mapped-диагностика,
+semantic tokens, completion/hover, `gd` (локальный символ и импорт `#Использовать`),
+изоляция блоков и отсутствие вмешательства вне блоков подтверждены (фикстура
+`tests/fixtures/lsp/embedded/manual-check.html`, раздел 5 `quickstart.md` спеки 015). **Слой B — тонкий клиент VS Code — реализован** по спеке
+[`specs/017-vscode-client/spec.md`](../specs/017-vscode-client/spec.md):
+`extensions/vscode/` регистрирует язык `osjs` и грамматику, запускает LSP-сервер на
+Node-рантайме VS Code и по настройке `onescriptjs.embeddedInHtml` обслуживает HTML-блоки;
+сборка `.vsix` — `pnpm build:vscode` (`dist/vscode/onescriptjs-0.1.0.vsix`, 10 файлов,
+0,24 МБ; сервер/грамматика/бандл внутри, без `node_modules`). Установка —
+`code --install-extension …`; автоматические проверки (790 тестов) и сборка пакета зелёные;
+**ручная приёмка в GUI VS Code выполнена владельцем**: hover/`gd`/автодополнение и прочее
+работают и в `.osjs`-файлах, и во встроенных блоках HTML. Следующий слой —
+**C**: грамматическая инъекция `<script type="text/osjs">`/embedded language mode.
+Сборка `.vsix` требует Node.js >= 22 (упаковщик); рантайму нужен только VS Code.
+
+**Слой C — embedded language mode — реализован** по спеке
+[`specs/018-embedded-language-mode/spec.md`](../specs/018-embedded-language-mode/spec.md):
+TextMate-инъекция `editors/osjs/osjs-embedded.tmLanguage.json` размечает содержимое
+`script[type="text/osjs"]` как `meta.embedded.block.osjs` и включает `source.osjs`;
+`embeddedLanguages`-мэппинг на язык `osjs` даёт в регионе BSL-комментарии/скобки/word
+pattern/фолдинг. Вне блока — HTML без изменений, `.osjs` не тронут; работает и без
+LSP-сервера. Проверка: `pnpm test` (838 тестов, включая scope-тесты на вендоренной
+HTML-грамматике VS Code 1.146.0) и `pnpm build:vscode` (`.vsix` 11 файлов, обе
+грамматики внутри). **Ручная приёмка в GUI VS Code выполнена владельцем**: подсветка,
+`Ctrl+/`, фолдинг `#Область`, word pattern/Emmet и прочие UI-кейсы работают (T014 закрыт).
 
 ## Известные пробелы
+- VS Code embedded language mode (спека 018): ручная приёмка UI пройдена (подсветка/
+  комментарии/фолдинг/word pattern/Emmet); многострочный `type`-атрибут тега не
+  поддерживается (TextMate построчный); работает только в VS Code-семействе (остальные —
+  semantic tokens).
+- VS Code клиент (спека 017): ручная проверка в GUI пройдена (`.osjs` и HTML-блоки); `.vsix`
+  не подписан и не публикуется в Marketplace; сборка расширения требует Node.js >= 22
+  (`@vscode/vsce`); HTML-подсветка — только semantic tokens (грамматической инъекции нет);
+  `engines.vscode ^1.91.0`.
 - Встроенные блоки (спека 016): ручная проверка в браузере пройдена (примеры работают), но
   поведение data blocks под строгой CSP-политикой `script-src` отдельно не проверялось;
   happy-dom эмулирует `DOMContentLoaded`/`readyState` (в тестах — 'interactive'); динамически
-  добавленные блоки и `src` не поддерживаются по решению владельца (v1); диагностика
-  `</script>` (OSJS4001) и `<script`/`<!--` (OSJS4002) — контракт, реализация — в спеке 015
-  (не начата).
+  добавленные блоки и `src` не поддерживаются по решению владельца (v1).
+- Embedded-инструменты HTML (015, слой A): `OSJS4001` — эвристика (обрыв определяется по
+  незакрытой строке/parse-error у конца блока), возможны редкие ложные/пропуски; `OSJS4002`
+  — текстовый скан (срабатывает и в строках/комментариях BSL); outline BSL внутри HTML не
+  реализуется; грамматической инъекции и клиента VS Code пока нет (подсветка — semantic
+  tokens); headless- и ручная (GUI Neovim) проверки пройдены — все сценарии слоя A
+  подтверждены; остаются известные ограничения: эвристика `OSJS4001`, текстовый скан
+  `OSJS4002`, отсутствие грамматической инъекции и клиента VS Code (слои B/C).
 - LSP-инструменты (спека 014): ручная проверка выполнена в Neovim 0.12.2 — подсветка,
   диагностика, completion, hover, `definition` (локальный метод и импортированный
   `.osjs`), outline (`documentSymbol`) подтверждены; не проверялись визуально поведение

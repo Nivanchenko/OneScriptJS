@@ -401,6 +401,28 @@ vim.lsp.start({
 })
 ```
 
+### Расширение VS Code
+
+Тонкий клиент — [`extensions/vscode/`](extensions/vscode/README.md), спека
+[`017`](specs/017-vscode-client/spec.md). Ставится локально из `.vsix`; в пакете уже
+лежат сервер, грамматика и конфигурация, отдельный Node.js не нужен:
+
+```bash
+pnpm build:vscode
+code --install-extension dist/vscode/onescriptjs-0.1.0.vsix --force
+# Reload Window в VS Code
+```
+
+`*.osjs` получает подсветку, диагностику, автодополнение, hover, semantic tokens,
+Outline и переходы. HTML со `<script type="text/osjs">` обслуживается по настройке
+`onescriptjs.embeddedInHtml` (по умолчанию включена); `.os` расширение не заявляет.
+В HTML-блоках работает **embedded language mode**: содержимое
+`<script type="text/osjs">` подсвечивается полной BSL-грамматикой, `Ctrl+/` даёт `//`,
+`#Область`/`#Если` складываются, скобки/кавычки и word pattern — как в `.osjs`
+(VS Code-семейство; в других редакторах — semantic tokens). Грамматика работает
+и без запущенного LSP-сервера. Сборка `.vsix` требует Node.js >= 22
+(упаковщик `@vscode/vsce`); для работы расширения нужен только VS Code.
+
 Пример для ручной проверки — [`examples/editor.osjs`](examples/editor.osjs),
 фикстуры — `tests/fixtures/lsp/`. Тонкий клиент VS Code (установка из `.vsix`) —
 отдельная следующая работа; грамматика и сервер от него не зависят.

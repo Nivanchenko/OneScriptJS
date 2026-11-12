@@ -154,6 +154,8 @@ function buildCatalog(file) {
   const functionNames = new Set();
   const types = new Map();
   const enums = new Map();
+  /** Все заголовки ### — из них добираем типы без таблиц методов/свойств. */
+  const headings = [];
   let section = '';
   let subsection = '';
 
@@ -239,6 +241,7 @@ function buildCatalog(file) {
     const h3 = /^### (.+)$/.exec(line);
     if (h3) {
       subsection = h3[1].trim();
+      headings.push(subsection);
       i++;
       continue;
     }
@@ -276,6 +279,14 @@ function buildCatalog(file) {
   const registeredTypes = scanSrc((source, add) => {
     for (const m of source.matchAll(/registerType\(\s*'([^']+)'/g)) add(m[1]);
   });
+  // Типы без таблиц (например, `УникальныйИдентификатор`) не появляются из таблиц —
+  // добираем их из заголовков ### по именам registerType.
+  for (const name of registeredTypes) {
+    const heading = headings.find((candidate) =>
+      headingNames(candidate).some((part) => part.toLowerCase() === name),
+    );
+    if (heading !== undefined) ensureType(heading);
+  }
   for (const type of types.values()) {
     type.constructible =
       registeredTypes.has(type.ru.toLowerCase()) ||
@@ -420,6 +431,23 @@ function main() {
     console.error(`В каталоге не найдено ${missing.length} имён API из src/:`);
     for (const name of missing.slice(0, 50)) console.error(`  - ${name}`);
     console.error('\nПроверьте разбор docs/reference.md и полноту справочника.');
+    process.exit(1);
+  }
+  // Отдельно: registerType-имена должны быть именно ТИПАМИ каталога, а не просто
+  // встречаться как члены/свойства других типов.
+  const catalogTypeNames = new Set();
+  for (const type of catalog.types) {
+    catalogTypeNames.add(type.ru.toLowerCase());
+    if (type.en !== undefined) catalogTypeNames.add(type.en.toLowerCase());
+  }
+  const missingTypes = [...scanSrc((source, add) => {
+    for (const m of source.matchAll(/registerType\(\s*'([^']+)'/g)) add(m[1]);
+  })].filter((name) => !catalogTypeNames.has(name));
+  if (missingTypes.length > 0) {
+    console.error(`В каталоге нет ${missingTypes.length} зарегистрированных типов:`);
+    for (const name of missingTypes.slice(0, 50)) console.error(`  - ${name}`);
+    console.error('\nДобавьте заголовок типа в docs/reference.md или поправьте разбор.');
+    console.error('Перегенерируйте: pnpm build:catalog');
     process.exit(1);
   }
 

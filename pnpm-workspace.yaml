@@ -3,3 +3,5 @@
 # В v11 build-настройки объединены в карту `allowBuilds`.
 allowBuilds:
   esbuild: true
+  # Копирует платформенный бинарник подписи для @vscode/vsce (нужен `pnpm install`).
+  '@vscode/vsce-sign': true

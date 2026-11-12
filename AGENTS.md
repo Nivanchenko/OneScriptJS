@@ -52,6 +52,8 @@
 | Полная сборка (типы + браузер + Node + LSP) | `pnpm build` |
 | Собрать LSP-сервер (`dist/lsp/server.mjs`) | `pnpm build:lsp` |
 | Перегенерировать каталог API для инструментов | `pnpm build:catalog` |
+| Собрать VS Code-расширение (`.vsix`, Node >= 22) | `pnpm build:vscode` |
+| Проверка типов расширения VS Code | `pnpm typecheck:vscode` |
 | Запустить LSP-сервер (stdio) | `pnpm lsp` |
 | Запустить тесты | `pnpm test` |
 | Проверить, что API задокументирован в справочнике | `pnpm check:docs` |
@@ -79,7 +81,8 @@ OneScriptJS/
 │   │   └── lsp-server.ts ← stdio-точка входа LSP-сервера
 │   └── lsp/                ← инструменты .osjs: анализ, диагностика, подсказки
 ├── editors/osjs/           ← TextMate-грамматика, конфигурация языка, метаданные
-├── scripts/                ← check-api-docs.mjs, build-api-catalog.mjs, …
+├── extensions/vscode/      ← тонкий клиент VS Code (грамматика + LSP-клиент, .vsix)
+├── scripts/                ← check-api-docs.mjs, build-api-catalog.mjs, build-vscode-extension.mjs, …
 ├── tests/                  ← юнит-тесты Vitest
 ├── examples/               ← HTML-примеры (hello.html — приёмочный сценарий)
 ├── docs/
@@ -208,7 +211,7 @@ OneScriptJS/
   параметрами/возвратом, объекты с полями и методами, перечисления.
 - [`task.md`](task.md) — исходное ТЗ и приёмочный HTML-пример.
 - [`docs/architecture.md`](docs/architecture.md) — карта слоёв и статус переноса.
-- [`specs/`](specs/) — спецификации работ (001–014); план и задачи
+- [`specs/`](specs/) — спецификации работ (001–017); план и задачи
   создаются в каталоге конкретной спеки по мере готовности.
 - [`docs/bsl-surface.md`](docs/bsl-surface.md) — синтаксис и stdlib BSL (по `reference/tests`).
 - `reference/OneScript/AGENTS.md` — инструкции к оригиналу (для справки).

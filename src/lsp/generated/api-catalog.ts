@@ -5385,6 +5385,13 @@ export const API_CATALOG = {
         }
       ],
       "properties": []
+    },
+    {
+      "ru": "УникальныйИдентификатор",
+      "en": "UUID",
+      "constructible": true,
+      "methods": [],
+      "properties": []
     }
   ],
   "enums": [

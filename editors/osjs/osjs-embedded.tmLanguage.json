@@ -1,0 +1,53 @@
+{
+  "scopeName": "osjs.embedded.injection",
+  "injectionSelector": "L:text.html.basic - (comment.block, meta.embedded)",
+  "patterns": [
+    {
+      "comment": "Содержимое <script type=\"text/osjs\"> — BSL. Открывающий тег остаётся HTML: его атрибуты разбираются репозиторием text.html.basic#attribute (без копирования правил).",
+      "begin": "(?i)(<)(script)\\b(?=[^>]*\\s+type\\s*=\\s*['\"]?text/osjs(?![\\w-]))([^>]*)(>)",
+      "beginCaptures": {
+        "0": {
+          "name": "meta.tag.metadata.script.start.html"
+        },
+        "1": {
+          "name": "punctuation.definition.tag.begin.html"
+        },
+        "2": {
+          "name": "entity.name.tag.html"
+        },
+        "3": {
+          "name": "meta.tag.metadata.script.start.html",
+          "patterns": [
+            {
+              "include": "text.html.basic#attribute"
+            }
+          ]
+        },
+        "4": {
+          "name": "punctuation.definition.tag.end.html"
+        }
+      },
+      "end": "(?i)(</)(script)\\s*(>)",
+      "endCaptures": {
+        "0": {
+          "name": "meta.tag.metadata.script.end.html"
+        },
+        "1": {
+          "name": "punctuation.definition.tag.begin.html"
+        },
+        "2": {
+          "name": "entity.name.tag.html"
+        },
+        "3": {
+          "name": "punctuation.definition.tag.end.html"
+        }
+      },
+      "contentName": "meta.embedded.block.osjs",
+      "patterns": [
+        {
+          "include": "source.osjs"
+        }
+      ]
+    }
+  ]
+}

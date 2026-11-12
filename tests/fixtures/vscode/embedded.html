@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>OneScriptJS embedded grammar fixture</title>
+</head>
+<body>
+  <h1>Embedded osjs</h1>
+  <script type="text/osjs">
+    // BSL-комментарий
+    #Область Демонстрация
+    Процедура Тест(Знач Параметр)
+      Сообщить("Привет");
+      Если Параметр > 10 Тогда
+        Сообщить("много");
+      КонецЕсли;
+    КонецПроцедуры
+    #КонецОбласти
+  </script>
+  <script type="text/javascript">
+    const message = "hello";
+    console.log(message);
+  </script>
+  <p class="note">Обычный HTML</p>
+  <!-- <script type="text/osjs"> Сообщить("в комментарии"); </script> -->
+  <script type='text/osjs'>Сообщить("inline");</script>
+  <SCRIPT TYPE="TEXT/OSJS">
+    Перем Счётчик;
+    Счётчик = 1;
+  </SCRIPT>
+  <pre>HTML вне блоков</pre>
+</body>
+</html>
