@@ -24,7 +24,7 @@
 
   <script src="/onescript.js"></script>
 
-  <one-script>
+  <script type="text/osjs">
     Перем Текст;
 
     Процедура НажатиеКнопки(Сообщение)
@@ -43,12 +43,12 @@
     Кнопка.НаСобытие("Нажатие","НажатиеКнопки(""Текст " + Рандом + """)");
     Кнопка.ДобавитьВ(Документ.ПолучитьЭлемент("контейнер"));
 
-  </one-script>
+  </script>
 
   <script>
-    // Показываем исходник <one-script> на странице: сам элемент скрыт стилем движка.
+    // Показываем исходник блока text/osjs на странице: script-блок нативно скрыт браузером.
     document.getElementById('код').textContent =
-      document.querySelector('one-script').textContent.trim();
+      document.querySelector('script[type="text/osjs"]').textContent.trim();
 
     // Сообщить() пишет в console.log — дублируем вывод на страницу, чтобы результат
     // был виден без devtools. Оригинальный console.log при этом не отключаем.

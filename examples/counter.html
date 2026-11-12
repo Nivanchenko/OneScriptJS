@@ -12,19 +12,19 @@
 <body>
   <h2>Счётчик на кнопке</h2>
   <p>Обработчик привязан декларативно через <code>data-os-click</code>, код исполняется
-     в области видимости <code>&lt;one-script&gt;</code>.</p>
+     в области видимости <code>&lt;script type="text/osjs"&gt;</code>.</p>
 
   <button id="кнопка" data-os-click="Счёт = Счёт + 1; Вывод.Текст = Строка(Счёт);">+1</button>
   <output id="вывод">0</output>
 
   <script src="/onescript.js"></script>
 
-  <one-script>
+  <script type="text/osjs">
     Перем Счёт;
     Счёт = 0;
 
     Вывод = Документ.ПолучитьЭлемент("вывод");
     сообщить("Счётчик готов");
-  </one-script>
+  </script>
 </body>
 </html>

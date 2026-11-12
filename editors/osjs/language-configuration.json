@@ -1,0 +1,26 @@
+{
+  "comments": {
+    "lineComment": "//"
+  },
+  "brackets": [
+    ["(", ")"],
+    ["[", "]"]
+  ],
+  "autoClosingPairs": [
+    { "open": "(", "close": ")" },
+    { "open": "[", "close": "]" },
+    { "open": "\"", "close": "\"", "notIn": ["string", "comment"] }
+  ],
+  "surroundingPairs": [
+    ["(", ")"],
+    ["[", "]"],
+    ["\"", "\""]
+  ],
+  "folding": {
+    "markers": {
+      "start": "^\\s*#(Область|Region|Если|If)(?![\\wА-Яа-яЁё])",
+      "end": "^\\s*#(КонецОбласти|EndRegion|КонецЕсли|EndIf)(?![\\wА-Яа-яЁё])"
+    }
+  },
+  "wordPattern": "[A-Za-zА-Яа-яЁё\\u0370-\\u03FF_][A-Za-zА-Яа-яЁё\\u0370-\\u03FF0-9_]*"
+}

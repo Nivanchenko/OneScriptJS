@@ -4,9 +4,9 @@ import { BslDomEvent, domEventType } from './dom';
 /**
  * Декларативная привязка событий: `<button data-os-click="…">`.
  *
- * Контекст исполнения — область видимости `<one-script>`:
- * - `data-os-script="<id>"` на элементе ссылается на `<one-script id="…">`;
- * - без атрибута используется первый зарегистрированный `<one-script>`.
+ * Контекст исполнения — контекст блока `<script type="text/osjs">`:
+ * - `data-os-script="<id>"` на элементе ссылается на `<script … id="…">`;
+ * - без атрибута используется первый зарегистрированный блок без `id`.
  *
  * Контекст ищется **в момент события**, поэтому порядок загрузки скриптов
  * и элементов не важен.
@@ -17,7 +17,7 @@ const scriptContexts = new Map<string, GlobalContext>();
 const boundElements = new WeakSet<Element>();
 let warnedNoScript = false;
 
-/** Регистрирует контекст `<one-script>` для декларативных обработчиков. */
+/** Регистрирует контекст блока `<script type="text/osjs">` для декларативных обработчиков. */
 export function registerScriptContext(id: string | null, ctx: GlobalContext): void {
   if (id) {
     scriptContexts.set(id, ctx);
@@ -48,7 +48,7 @@ function makeHandler(element: Element, code: string): (event: Event) => void {
     if (!ctx || !interpreter) {
       if (!warnedNoScript) {
         warnedNoScript = true;
-        console.warn('Не найден <one-script> для декларативных обработчиков data-os-*');
+        console.warn('Не найден <script type="text/osjs"> для декларативных обработчиков data-os-*');
       }
       return;
     }
@@ -89,8 +89,8 @@ export function bindDeclarativeHandlers(root?: ParentNode): void {
 }
 
 /**
- * Планирует привязку после текущей задачи (скрипты `<one-script>` выполняются
- * в `queueMicrotask`, поэтому привязка должна идти после них).
+ * Планирует привязку после текущей задачи (блоки `<script type="text/osjs">`
+ * исполняются асинхронно, поэтому привязка должна идти после них).
  */
 let scheduled = false;
 export function scheduleDeclarativeBinding(): void {

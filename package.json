@@ -29,8 +29,11 @@
     "build:browser": "vite build",
     "build:node": "vite build --config vite.node.config.ts && tsc -p tsconfig.build.json",
     "build:cli": "vite build --config vite.cli.config.ts",
-    "build": "tsc --noEmit && vite build && vite build --config vite.node.config.ts && vite build --config vite.cli.config.ts && tsc -p tsconfig.build.json",
+    "build:lsp": "vite build --config vite.lsp.config.ts",
+    "build:catalog": "node scripts/build-api-catalog.mjs",
+    "build": "tsc --noEmit && vite build && vite build --config vite.node.config.ts && vite build --config vite.cli.config.ts && tsc -p tsconfig.build.json && vite build --config vite.lsp.config.ts",
     "oscript": "node dist/cli.mjs",
+    "lsp": "node dist/lsp/server.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "demo": "vite build && node scripts/copy-examples.mjs && vite preview --port 4173 --open /",
@@ -41,6 +44,11 @@
     "happy-dom": "^21.0.4",
     "typescript": "^5.9.3",
     "vite": "^6.4.5",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "vscode-jsonrpc": "10.0.0",
+    "vscode-languageserver": "11.0.0",
+    "vscode-languageserver-textdocument": "1.0.16",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
   }
 }

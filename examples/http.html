@@ -16,7 +16,7 @@
 <body>
   <h2>OneScript: HTTP-запросы к бэкенду</h2>
   <p>
-    Код внутри <code>&lt;one-script&gt;</code> создаёт <code>HTTPСоединение</code> и
+    Код внутри <code>&lt;script type="text/osjs"&gt;</code> создаёт <code>HTTPСоединение</code> и
     <code>HTTPЗапрос</code>, получает ответ и печатает его. В режимах <code>pnpm dev</code> и <code>pnpm demo</code>
     доступен мок-бэкенд: <code>GET /api/demo</code> и <code>POST /api/echo</code>.
     Для своего сервера замените адрес и путь; кросс-доменный сервер должен разрешать CORS.
@@ -42,7 +42,7 @@
   <script>document.getElementById("сервер").value = location.origin;</script>
   <script src="/onescript.js"></script>
 
-  <one-script>
+  <script type="text/osjs">
     Перем ПолеСервера;
     Перем ПолеПутиПолучить;
     Перем ПолеПутиОтправить;
@@ -92,6 +92,6 @@
     Документ.ПолучитьЭлемент("отправить").НаСобытие("Нажатие", "СделатьОтправить()");
 
     СделатьПолучить();
-  </one-script>
+  </script>
 </body>
 </html>

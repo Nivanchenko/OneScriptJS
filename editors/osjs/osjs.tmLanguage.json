@@ -1,0 +1,325 @@
+{
+  "displayName": "osjs",
+  "name": "osjs",
+  "scopeName": "source.osjs",
+  "fileTypes": [
+    "osjs"
+  ],
+  "patterns": [
+    {
+      "include": "#basic"
+    },
+    {
+      "include": "#miscellaneous"
+    },
+    {
+      "name": "storage.modifier.async.osjs",
+      "match": "(?i:(?<=[^\\wа-яё\\.]|^)(Асинх|Async)(?=[^\\wа-яё\\.]|$))"
+    },
+    {
+      "name": "keyword.operator.word.await.osjs",
+      "match": "(?i:(?<=[^\\wа-яё\\.]|^)(Ждать|Await)(?=[^\\wа-яё\\.]|$))"
+    },
+    {
+      "comment": "Proc and function definition",
+      "begin": "(?i:(?<=[^\\wа-яё\\.]|^)(Процедура|Procedure|Функция|Function)\\s+([a-zа-яё0-9_]+)\\s*(\\())",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.osjs"
+        },
+        "2": {
+          "name": "entity.name.function.osjs"
+        },
+        "3": {
+          "name": "punctuation.bracket.begin.osjs"
+        }
+      },
+      "end": "(?i:(\\))\\s*((Экспорт|Export)(?=[^\\wа-яё\\.]|$))?)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.bracket.end.osjs"
+        },
+        "2": {
+          "name": "storage.modifier.osjs"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#annotations"
+        },
+        {
+          "include": "#basic"
+        },
+        {
+          "name": "keyword.operator.assignment.osjs",
+          "match": "(=)"
+        },
+        {
+          "name": "storage.modifier.osjs",
+          "match": "(?i:(?<=[^\\wа-яё\\.]|^)(Знач|Val)(?=[^\\wа-яё\\.]|$))"
+        },
+        {
+          "name": "invalid.illegal.osjs",
+          "match": "(?<=[^\\wа-яё\\.]|^)((?<==)(?i)[a-zа-яё0-9_]+)(?=[^\\wа-яё\\.]|$)"
+        },
+        {
+          "name": "invalid.illegal.osjs",
+          "match": "(?<=[^\\wа-яё\\.]|^)((?<==\\s)\\s*(?i)[a-zа-яё0-9_]+)(?=[^\\wа-яё\\.]|$)"
+        },
+        {
+          "name": "variable.parameter.osjs",
+          "match": "(?i:[a-zа-яё0-9_]+)"
+        }
+      ]
+    },
+    {
+      "comment": "Define of variable",
+      "begin": "(?i:(?<=[^\\wа-яё\\.]|^)(Перем|Var)\\s+([a-zа-яё0-9_]+)\\s*)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.var.osjs"
+        },
+        "2": {
+          "name": "variable.osjs"
+        }
+      },
+      "end": "(;)",
+      "endCaptures": {
+        "1": {
+          "name": "keyword.operator.osjs"
+        }
+      },
+      "patterns": [
+        {
+          "name": "keyword.operator.osjs",
+          "match": "(,)"
+        },
+        {
+          "name": "storage.modifier.osjs",
+          "match": "(?i:(?<=[^\\wа-яё\\.]|^)(Экспорт|Export)(?=[^\\wа-яё\\.]|$))"
+        },
+        {
+          "name": "variable.osjs",
+          "match": "(?i:[a-zа-яё0-9_]+)"
+        }
+      ]
+    },
+    {
+      "comment": "Conditional",
+      "name": "meta.conditional.osjs",
+      "begin": "(?i:(?<=;|^)\\s*(Если|If))",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.conditional.osjs"
+        }
+      },
+      "end": "(?i:(Тогда|Then))",
+      "endCaptures": {
+        "1": {
+          "name": "keyword.control.conditional.osjs"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#basic"
+        },
+        {
+          "include": "#miscellaneous"
+        }
+      ]
+    },
+    {
+      "comment": "Variable assignment",
+      "name": "meta.var-single-variable.osjs",
+      "begin": "(?i:(?<=;|^)\\s*([\\wа-яё]+))\\s*(=)",
+      "beginCaptures": {
+        "1": {
+          "name": "variable.assignment.osjs"
+        },
+        "2": {
+          "name": "keyword.operator.assignment.osjs"
+        }
+      },
+      "end": "(?i:(?=(;|Иначе|Конец|Els|End)))",
+      "patterns": [
+        {
+          "include": "#basic"
+        },
+        {
+          "include": "#miscellaneous"
+        }
+      ]
+    },
+    {
+      "name": "storage.type.osjs",
+      "match": "(?i:(?<=[^\\wа-яё\\.]|^)(КонецПроцедуры|EndProcedure|КонецФункции|EndFunction)(?=[^\\wа-яё\\.]|$))"
+    },
+    {
+      "name": "keyword.control.import.osjs",
+      "match": "(?i)#(Использовать|Use)(?=[^\\wа-яё\\.]|$)"
+    },
+    {
+      "name": "keyword.control.osjs",
+      "match": "(?i:(?<=[^\\wа-яё\\.]|^)(Прервать|Break|Продолжить|Continue|Возврат|Return|Перейти|Goto|Выполнить|Execute|ДобавитьОбработчик|AddHandler|УдалитьОбработчик|RemoveHandler)(?=[^\\wа-яё\\.]|$))"
+    },
+    {
+      "name": "keyword.control.conditional.osjs",
+      "match": "(?i:(?<=[^\\wа-яё\\.]|^)(Если|If|Иначе|Else|ИначеЕсли|ElsIf|Тогда|Then|КонецЕсли|EndIf)(?=[^\\wа-яё\\.]|$))"
+    },
+    {
+      "name": "keyword.control.exception.osjs",
+      "match": "(?i:(?<=[^\\wа-яё\\.]|^)(Попытка|Try|Исключение|Except|КонецПопытки|EndTry|ВызватьИсключение|Raise)(?=[^\\wа-яё\\.]|$))"
+    },
+    {
+      "name": "keyword.control.repeat.osjs",
+      "match": "(?i:(?<=[^\\wа-яё\\.]|^)(Пока|While|(Для|For)(\\s+(Каждого|Each))?|Из|In|По|To|Цикл|Do|КонецЦикла|EndDo)(?=[^\\wа-яё\\.]|$))"
+    },
+    {
+      "include": "#annotations"
+    },
+    {
+      "name": "keyword.other.preprocessor.osjs",
+      "match": "(?i:#(Если|If|ИначеЕсли|ElsIf|Иначе|Else|КонецЕсли|EndIf).*(Тогда|Then)?)"
+    },
+    {
+      "comment": "Region start",
+      "begin": "(?i)(#(Область|Region))(\\s+([\\wа-яё]+))?",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.section.osjs"
+        },
+        "4": {
+          "name": "entity.name.section.osjs"
+        }
+      },
+      "end": "$"
+    },
+    {
+      "comment": "Region end",
+      "name": "keyword.other.section.osjs",
+      "match": "(?i)#(КонецОбласти|EndRegion)"
+    }
+  ],
+  "repository": {
+    "miscellaneous": {
+      "patterns": [
+        {
+          "name": "keyword.operator.logical.osjs",
+          "match": "(?i:(?<=[^\\wа-яё\\.]|^)(НЕ|NOT|И|AND|ИЛИ|OR)(?=[^\\wа-яё\\.]|$))"
+        },
+        {
+          "name": "keyword.operator.comparison.osjs",
+          "match": "<=|>=|=|<|>"
+        },
+        {
+          "name": "keyword.operator.arithmetic.osjs",
+          "match": "(\\+|-|\\*|/|%)"
+        },
+        {
+          "name": "keyword.operator.osjs",
+          "match": "(;|\\?)"
+        },
+        {
+          "comment": "Новый / New — ключевое слово движка",
+          "name": "keyword.other.new.osjs",
+          "match": "(?i:(?<=[^\\wа-яё\\.]|^)(Новый|New)(?=[^\\wа-яё\\.]|$))"
+        }
+      ]
+    },
+    "basic": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.osjs",
+          "begin": "//",
+          "end": "$"
+        },
+        {
+          "name": "string.quoted.double.osjs",
+          "begin": "\\\"",
+          "end": "\\\"(?![\\\"])",
+          "patterns": [
+            {
+              "name": "constant.character.escape.osjs",
+              "match": "\\\"\\\""
+            }
+          ]
+        },
+        {
+          "name": "constant.language.osjs",
+          "match": "(?i:(?<=[^\\wа-яё\\.]|^)(Неопределено|Undefined|Истина|True|Ложь|False|NULL)(?=[^\\wа-яё\\.]|$))"
+        },
+        {
+          "name": "constant.numeric.osjs",
+          "match": "(?<=[^\\wа-яё\\.]|^)(\\d+\\.?\\d*)(?=[^\\wа-яё\\.]|$)"
+        },
+        {
+          "name": "constant.other.date.osjs",
+          "match": "\\'((\\d{4}[^\\d\\']*\\d{2}[^\\d\\']*\\d{2})([^\\d\\']*\\d{2}[^\\d\\']*\\d{2}([^\\d\\']*\\d{2})?)?)\\'"
+        },
+        {
+          "name": "keyword.operator.osjs",
+          "match": "(,)"
+        },
+        {
+          "name": "punctuation.bracket.begin.osjs",
+          "match": "(\\()"
+        },
+        {
+          "name": "punctuation.bracket.end.osjs",
+          "match": "(\\))"
+        }
+      ]
+    },
+    "annotations": {
+      "patterns": [
+        {
+          "comment": "Annotations with parameters",
+          "begin": "(?i)(&([a-zа-яё0-9_]+))\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.annotation.osjs"
+            },
+            "3": {
+              "name": "punctuation.bracket.begin.osjs"
+            }
+          },
+          "end": "(\\))",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.bracket.end.osjs"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#annotations"
+            },
+            {
+              "include": "#basic"
+            },
+            {
+              "name": "keyword.operator.assignment.osjs",
+              "match": "(=)"
+            },
+            {
+              "name": "invalid.illegal.osjs",
+              "match": "(?<=[^\\wа-яё\\.]|^)((?<==)(?i)[a-zа-яё0-9_]+)(?=[^\\wа-яё\\.]|$)"
+            },
+            {
+              "name": "invalid.illegal.osjs",
+              "match": "(?<=[^\\wа-яё\\.]|^)((?<==\\s)\\s*(?i)[a-zа-яё0-9_]+)(?=[^\\wа-яё\\.]|$)"
+            },
+            {
+              "name": "variable.annotation.osjs",
+              "match": "(?i)[a-zа-яё0-9_]+"
+            }
+          ]
+        },
+        {
+          "comment": "Annotations without parameters",
+          "name": "storage.type.annotation.osjs",
+          "match": "(?i)(&([a-zа-яё0-9_]+))"
+        }
+      ]
+    }
+  }
+}

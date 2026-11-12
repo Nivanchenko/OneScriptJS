@@ -23,5 +23,5 @@
 
     "types": ["node"]
   },
-  "include": ["src", "tests", "vite.config.ts", "vite.node.config.ts", "vitest.config.ts"]
+  "include": ["src", "tests", "vite.config.ts", "vite.node.config.ts", "vite.lsp.config.ts", "vitest.config.ts"]
 }

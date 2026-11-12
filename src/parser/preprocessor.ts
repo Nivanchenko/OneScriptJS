@@ -7,14 +7,15 @@ import { Interpreter } from '../runtime/interpreter';
 import { toBoolean } from '../runtime/values';
 import type { Value } from '../runtime/values';
 
-// Директивы распознаются регистронезависимо (RU/EN).
-const DIR_IF = new Set(['если', 'if']);
-const DIR_ELSIF = new Set(['иначеесли', 'elsif']);
-const DIR_ELSE = new Set(['иначе', 'else']);
-const DIR_ENDIF = new Set(['конецесли', 'endif']);
-const DIR_REGION = new Set(['область', 'region']);
-const DIR_ENDREGION = new Set(['конецобласти', 'endregion']);
-const DIR_USE = new Set(['использовать', 'use']);
+import {
+  DIR_ELSE,
+  DIR_ELSIF,
+  DIR_ENDIF,
+  DIR_ENDREGION,
+  DIR_IF,
+  DIR_REGION,
+  DIR_USE,
+} from './keywords';
 
 interface CondCtx {
   parentActive: boolean;
@@ -33,6 +34,20 @@ export interface PreprocessResult {
   imports: ImportDirective[];
 }
 
+/** Ошибка директивы с диапазоном; в толерантном режиме не прерывает разбор. */
+export interface PreprocessDiagnostic {
+  readonly message: string;
+  readonly line: number;
+  readonly column: number;
+  readonly endLine: number;
+  readonly endColumn: number;
+}
+
+export interface PreprocessOptions {
+  /** Если передан, ошибки директив складываются сюда, а не бросаются. */
+  errors?: PreprocessDiagnostic[];
+}
+
 /**
  * Препроцессор: убирает директивы `#Область`/`#КонецОбласти`/`#Использовать`
  * и выполняет условную компиляцию `#Если`/`#ИначеЕсли`/`#Иначе`/`#КонецЕсли`.
@@ -45,13 +60,24 @@ export function preprocess(tokens: Token[]): Token[] {
  * То же, что `preprocess`, но дополнительно возвращает импорты файлов —
  * только из активных веток `#Если`.
  */
-export function preprocessScript(tokens: Token[]): PreprocessResult {
+export function preprocessScript(tokens: Token[], options: PreprocessOptions = {}): PreprocessResult {
+  const diagnostics = options.errors;
   const result: Token[] = [];
   const imports: ImportDirective[] = [];
   const stack: CondCtx[] = [];
   const isEmitting = (): boolean => stack.every((c) => c.thisActive);
   // В эталоне #Использовать — аннотация модуля: она допустима только до кода.
   let sawCode = false;
+  const fail = (message: string, token: Token): void => {
+    if (diagnostics === undefined) throw new Error(`${message} (строка ${token.line})`);
+    diagnostics.push({
+      message,
+      line: token.line,
+      column: token.column,
+      endLine: token.endLine,
+      endColumn: token.endColumn,
+    });
+  };
 
   for (const token of tokens) {
     if (token.type === TokenType.EndOfFile) {
@@ -67,12 +93,11 @@ export function preprocessScript(tokens: Token[]): PreprocessResult {
       } else if (DIR_USE.has(directive)) {
         if (isEmitting()) {
           if (sawCode) {
-            throw new Error(
-              `Директива #Использовать должна быть расположена в начале модуля (строка ${token.line})`,
-            );
+            fail('Директива #Использовать должна быть расположена в начале модуля', token);
           }
-          const path = parseImportPath(rest, token.line);
-          if (path !== undefined) imports.push({ path, line: token.line });
+          const parsed = parseImportPath(rest);
+          if (parsed.error !== undefined) fail(parsed.error, token);
+          else if (parsed.path !== undefined) imports.push({ path: parsed.path, line: token.line });
         }
       } else if (DIR_IF.has(directive)) {
         const parentActive = isEmitting();
@@ -118,15 +143,15 @@ function parseDirective(lexeme: string): { directive: string; rest: string } {
  * Путь из строки в кавычках; `undefined` — директива без кавычек (имя библиотеки,
  * исторически no-op). Хвостовой `//`-комментарий после закрывающей кавычки игнорируется.
  */
-function parseImportPath(rest: string, line: number): string | undefined {
+function parseImportPath(rest: string): { path?: string; error?: string } {
   const text = rest.trim();
-  if (!text.startsWith('"')) return undefined;
+  if (!text.startsWith('"')) return {};
 
   let path = '';
   let i = 1;
   for (;;) {
     if (i >= text.length) {
-      throw new Error(`Незакрытая строка в директиве #Использовать (строка ${line})`);
+      return { error: 'Незакрытая строка в директиве #Использовать' };
     }
     const ch = text[i]!;
     if (ch === '"') {
@@ -141,10 +166,8 @@ function parseImportPath(rest: string, line: number): string | undefined {
     i += 1;
   }
 
-  if (path === '') {
-    throw new Error(`Пустой путь в директиве #Использовать (строка ${line})`);
-  }
-  return path;
+  if (path === '') return { error: 'Пустой путь в директиве #Использовать' };
+  return { path };
 }
 
 function evalCondition(rest: string): Value {

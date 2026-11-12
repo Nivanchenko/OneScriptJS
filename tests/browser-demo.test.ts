@@ -2,47 +2,35 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Window } from 'happy-dom';
-import { run } from '../src/runtime/runner';
-import { createBrowserGlobalContext } from '../src/browser/context';
-import { bindDeclarativeHandlers, registerScriptContext, resetDeclarativeHandlers } from '../src/browser/dom-events';
+import { flush, renderPage, runEngine } from './helpers/browser-script';
 
 const examplesDir = join(process.cwd(), 'examples');
 
-/** Разбирает демо-страницу: ставит body в happy-dom и исполняет первый <one-script>. */
-function loadDemo(file: string): Window {
+/** Разбирает демо-страницу: ставит body в happy-dom и исполняет её script-блоки. */
+async function loadDemo(file: string): Promise<Window> {
   const html = readFileSync(join(examplesDir, file), 'utf8');
   const bodyMatch = /<body[^>]*>([\s\S]*)<\/body>/i.exec(html);
   if (!bodyMatch) throw new Error(`В ${file} нет <body>`);
   // внешние <script src> в тесте не нужны
   const body = bodyMatch[1]!.replace(/<script\b[^>]*>\s*<\/script>/gi, '');
 
-  const window = new Window();
-  vi.stubGlobal('window', window);
-  vi.stubGlobal('document', window.document);
-  window.document.body.innerHTML = body;
-
-  const scripts = window.document.querySelectorAll('one-script');
-  if (scripts.length === 0) throw new Error(`В ${file} нет <one-script>`);
-  const code = scripts[0]!.textContent ?? '';
-  // убираем сам тег, чтобы он не мешал проверкам
-  scripts[0]!.remove();
-
-  const ctx = createBrowserGlobalContext();
-  registerScriptContext(null, ctx);
-  run(code, ctx);
-  bindDeclarativeHandlers(window.document as unknown as ParentNode);
+  const window = renderPage([], body);
+  if (window.document.querySelectorAll('script[type="text/osjs"]').length === 0) {
+    throw new Error(`В ${file} нет <script type="text/osjs">`);
+  }
+  await runEngine();
+  await flush();
   return window;
 }
 
 describe('демо-страницы examples/', () => {
   afterEach(() => {
-    resetDeclarativeHandlers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
-  it('counter.html: кнопка увеличивает счётчик', () => {
-    const window = loadDemo('counter.html');
+  it('counter.html: кнопка увеличивает счётчик', async () => {
+    const window = await loadDemo('counter.html');
     const button = window.document.getElementById('кнопка') as unknown as HTMLElement;
     button.click();
     button.click();
@@ -50,8 +38,8 @@ describe('демо-страницы examples/', () => {
     expect(window.document.getElementById('вывод')?.textContent).toBe('3');
   });
 
-  it('delegation.html: один обработчик на контейнере определяет нажатую кнопку', () => {
-    const window = loadDemo('delegation.html');
+  it('delegation.html: один обработчик на контейнере определяет нажатую кнопку', async () => {
+    const window = await loadDemo('delegation.html');
     const buttons = window.document.querySelectorAll('#панель button');
     const result = window.document.getElementById('результат');
 
@@ -63,8 +51,8 @@ describe('демо-страницы examples/', () => {
     expect(result?.textContent).toBe('Нажато: Хорошо (data-choice=Хорошо)');
   });
 
-  it('input.html: ввод зеркалируется в span', () => {
-    const window = loadDemo('input.html');
+  it('input.html: ввод зеркалируется в span', async () => {
+    const window = await loadDemo('input.html');
     const input = window.document.getElementById('поле') as unknown as HTMLInputElement;
     input.value = 'abc';
     (input as unknown as HTMLElement).dispatchEvent(
@@ -73,8 +61,8 @@ describe('демо-страницы examples/', () => {
     expect(window.document.getElementById('вывод')?.textContent).toBe('Вы ввели: abc');
   });
 
-  it('hover.html: наведение и уход меняют класс', () => {
-    const window = loadDemo('hover.html');
+  it('hover.html: наведение и уход меняют класс', async () => {
+    const window = await loadDemo('hover.html');
     const block = window.document.getElementById('блок') as unknown as HTMLElement;
     block.dispatchEvent(new window.Event('mouseenter') as unknown as Event);
     expect(block.className).toBe('активный');
@@ -82,16 +70,16 @@ describe('демо-страницы examples/', () => {
     expect(block.className).toBe('');
   });
 
-  it('dom.html: карточка со списком и кнопкой создаётся из BSL', () => {
-    const window = loadDemo('dom.html');
+  it('dom.html: карточка со списком и кнопкой создаётся из BSL', async () => {
+    const window = await loadDemo('dom.html');
     const card = window.document.getElementById('карточка');
     expect(card).not.toBeNull();
     expect(card!.querySelectorAll('li').length).toBe(3);
     expect(card!.querySelector('button')?.textContent).toBe('Выделить карточку');
   });
 
-  it('collections.html: таблица значений рендерится в DOM-отчёт', () => {
-    const window = loadDemo('collections.html');
+  it('collections.html: таблица значений рендерится в DOM-отчёт', async () => {
+    const window = await loadDemo('collections.html');
     const report = window.document.getElementById('отчёт');
     const table = report?.querySelector('table');
     expect(table).not.toBeNull();
@@ -111,8 +99,8 @@ describe('демо-страницы examples/', () => {
     );
   });
 
-  it('strings-json.html: строки, Формат и JSON выводятся в <pre>', () => {
-    const window = loadDemo('strings-json.html');
+  it('strings-json.html: строки, Формат и JSON выводятся в <pre>', async () => {
+    const window = await loadDemo('strings-json.html');
     const output = window.document.getElementById('вывод')?.textContent ?? '';
     expect(output).toContain('СтрШаблон: Привет, мир! Сегодня пятница.');
     expect(output).toContain('3 части: яблоко | банан | груша');
@@ -123,8 +111,8 @@ describe('демо-страницы examples/', () => {
     expect(output).toContain('ПрочитатьJSON: имя = Анна, город = Москва, возраст = 30');
   });
 
-  it('form.html: submit отменяется, приветствие показывается', () => {
-    const window = loadDemo('form.html');
+  it('form.html: submit отменяется, приветствие показывается', async () => {
+    const window = await loadDemo('form.html');
     const form = window.document.getElementById('форма') as unknown as HTMLElement;
     const input = window.document.getElementById('имя') as unknown as HTMLInputElement;
     input.value = 'Анна';

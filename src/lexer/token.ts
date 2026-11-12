@@ -9,6 +9,7 @@ export const TokenType = {
   Operator: 'Operator',
   EndOfStatement: 'EndOfStatement',
   Preprocessor: 'Preprocessor',
+  Comment: 'Comment',
   EndOfFile: 'EndOfFile',
 } as const;
 
@@ -27,4 +28,17 @@ export interface Token {
   readonly line: number;
   /** Номер колонки, с 1. */
   readonly column: number;
+  /** Строка сразу за последним символом токена (диапазон полуоткрытый). */
+  readonly endLine: number;
+  /** Колонка сразу за последним символом токена, в UTF-16 code units. */
+  readonly endColumn: number;
+}
+
+/** Лексическая ошибка с диапазоном; при толерантном разборе не прерывает поток. */
+export interface LexerDiagnostic {
+  readonly message: string;
+  readonly line: number;
+  readonly column: number;
+  readonly endLine: number;
+  readonly endColumn: number;
 }
