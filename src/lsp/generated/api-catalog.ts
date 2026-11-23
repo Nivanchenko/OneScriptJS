@@ -3656,21 +3656,50 @@ export const API_CATALOG = {
       "ru": "ИнформацияОбОшибке",
       "en": "ErrorInfo",
       "constructible": false,
-      "methods": [],
+      "methods": [
+        {
+          "ru": "ПодробноеОписаниеОшибки",
+          "en": "DetailErrorDescription",
+          "params": [],
+          "returns": "Строка",
+          "description": "Описание ошибки + `Стек вызовов:` с BSL-кадрами"
+        },
+        {
+          "ru": "ПолучитьСтекВызовов",
+          "en": "GetStackTrace",
+          "params": [],
+          "returns": "КоллекцияКадровСтекаВызовов",
+          "description": "BSL-стек на момент возникновения, изнутри наружу"
+        }
+      ],
       "properties": [
         {
           "ru": "Описание",
           "en": "Description",
           "type": "Строка",
           "access": "read",
-          "description": "Текст текущего исключения"
+          "description": "Текст текущего исключения (не меняется относительно прежнего поведения)"
         },
         {
-          "ru": "ПодробноеОписаниеОшибки",
-          "en": "DetailErrorDescription",
+          "ru": "ИмяМодуля",
+          "en": "ModuleName",
           "type": "Строка",
           "access": "read",
-          "description": "То же значение, что и `Описание` (отдельного стека нет)"
+          "description": "Идентификатор источника возникновения: путь/URL, `<скрипт>`, `<stdin>`, `<Выполнить>`/`<Вычислить>`"
+        },
+        {
+          "ru": "НомерСтроки",
+          "en": "LineNumber",
+          "type": "Число",
+          "access": "read",
+          "description": "1-based строка возникновения; `0` для пустой ошибки"
+        },
+        {
+          "ru": "ИсходнаяСтрока",
+          "en": "SourceLine",
+          "type": "Строка",
+          "access": "read",
+          "description": "Текст исходной строки (с отступами); `\"\"`, если недоступен"
         },
         {
           "ru": "Причина",
@@ -3680,6 +3709,50 @@ export const API_CATALOG = {
           "description": "Всегда `Null`: вложенные причины не поддерживаются"
         }
       ]
+    },
+    {
+      "ru": "КадрСтекаВызовов",
+      "en": "CallStackFrame",
+      "constructible": false,
+      "methods": [],
+      "properties": [
+        {
+          "ru": "Метод",
+          "en": "Method",
+          "type": "Строка",
+          "access": "read",
+          "description": "Имя BSL-метода; маркеры `<модуль>`, `<Выполнить>`, `<Вычислить>`, `<обработчик>`"
+        },
+        {
+          "ru": "НомерСтроки",
+          "en": "LineNumber",
+          "type": "Число",
+          "access": "read",
+          "description": "1-based строка, исполнявшаяся в кадре на момент ошибки"
+        },
+        {
+          "ru": "ИмяМодуля",
+          "en": "ModuleName",
+          "type": "Строка",
+          "access": "read",
+          "description": "Идентификатор источника кадра"
+        }
+      ]
+    },
+    {
+      "ru": "КоллекцияКадровСтекаВызовов",
+      "en": "CallStackFramesCollection",
+      "constructible": false,
+      "methods": [
+        {
+          "ru": "Количество",
+          "en": "Count",
+          "params": [],
+          "returns": "Число",
+          "description": "Число кадров в стеке"
+        }
+      ],
+      "properties": []
     },
     {
       "ru": "СистемнаяИнформация",

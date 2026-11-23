@@ -13,6 +13,7 @@
  * лексером, что и движок (используется редактором-песочницей).
  */
 import { run } from '../runtime/runner';
+import { formatErrorReport, getErrorSnapshot } from '../runtime/error-snapshot';
 import { preloadModuleSources, resolveUrlPath } from './module-source';
 import { createBrowserGlobalContext } from './context';
 import { registerScriptContext, scheduleDeclarativeBinding } from './dom-events';
@@ -74,7 +75,7 @@ async function blockSource(
 }
 
 /** Свежий контекст на блок; ошибка блока уходит в `console.error`, не прерывая остальные. */
-async function executeBlock(block: HTMLScriptElement): Promise<void> {
+async function executeBlock(block: HTMLScriptElement, index: number): Promise<void> {
   const doc = block.ownerDocument;
   try {
     const { source, url } = await blockSource(block);
@@ -82,23 +83,30 @@ async function executeBlock(block: HTMLScriptElement): Promise<void> {
     // Контекст нужен декларативным обработчикам (`data-os-*`) в этом блоке.
     registerScriptContext(block.id || null, ctx);
     const entryUrl = url ?? doc.baseURI;
+    // Идентификатор источника: URL файла или страница + id/порядковый номер блока.
+    const sourceId = url ?? `${doc.baseURI}#${block.id || `block${index}`}`;
     const modules = await preloadModuleSources(source, entryUrl);
     await run(source, ctx, {
       basePath: entryUrl,
       ...(url === undefined ? {} : { path: url }),
+      sourceId,
       modules,
       resolve: resolveUrlPath,
     });
     scheduleDeclarativeBinding();
   } catch (error) {
-    console.error(describeError(error));
+    // Ошибка со снимком печатается с позицией и стеком; загрузка/разбор — как раньше.
+    console.error(
+      getErrorSnapshot(error) === undefined ? describeError(error) : formatErrorReport(error),
+    );
   }
 }
 
 /** Последовательный `await` сохраняет порядок документа даже при асинхронной предзагрузке. */
 async function runAll(doc: Document): Promise<void> {
-  for (const block of collectBlocks(doc)) {
-    await executeBlock(block);
+  const blocks = collectBlocks(doc);
+  for (let i = 0; i < blocks.length; i++) {
+    await executeBlock(blocks[i]!, i + 1);
   }
 }
 

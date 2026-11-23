@@ -1,7 +1,8 @@
-import { tokenize } from '../lexer/lexer';
+import { stripBom, tokenize } from '../lexer/lexer';
 import { parse } from '../parser/parser';
 import { preprocessScript } from '../parser/preprocessor';
 import { Interpreter } from './interpreter';
+import { DEFAULT_SOURCE_ID } from './error-snapshot';
 import type { ModuleHost, ModuleRegistry, RuntimeEnvironment } from './context';
 import { defaultResolve, ModuleLoader } from './modules';
 import type { MaybePromise } from './async';
@@ -10,6 +11,8 @@ import { thenMaybe } from './async';
 export interface RunOptions {
   /** Путь к исполняемому файлу сценария (для `ТекущийСценарий`). */
   path?: string;
+  /** Идентификатор источника для `ИмяМодуля` (по умолчанию — `path` или `<скрипт>`). */
+  sourceId?: string;
   /** База для разрешения импортов главного файла (по умолчанию — `path`). */
   basePath?: string;
   /** Предзагруженные исходники: канонический путь → текст. Готовит платформа. */
@@ -58,7 +61,10 @@ export function run(source: string, env: RuntimeEnvironment, options?: RunOption
   state.modules = loader;
 
   const runBody = (): MaybePromise<void> => {
-    const interpreter = new Interpreter(env);
+    const interpreter = new Interpreter(env, {
+      id: options?.sourceId ?? options?.path ?? DEFAULT_SOURCE_ID,
+      text: stripBom(source),
+    });
     state.currentInterpreter = interpreter;
     return thenMaybe(interpreter.run(parse(tokens)), () => env.flushAsync?.());
   };

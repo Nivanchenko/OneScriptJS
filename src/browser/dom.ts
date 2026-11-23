@@ -4,6 +4,7 @@ import type { Interpreter } from '../runtime/interpreter';
 import type { Value } from '../runtime/values';
 import { toNumber, toStringValue } from '../runtime/values';
 import { BslArray } from '../stdlib/collections/array';
+import { formatErrorReport, getErrorSnapshot } from '../runtime/error-snapshot';
 
 /**
  * Обёртки над DOM для браузерного исполнения BSL.
@@ -215,15 +216,22 @@ export class BslDomElement implements BslObject {
   /** Подписка на DOM-событие: код исполняется в области видимости скрипта-подписчика. */
   private onEvent(domType: string, code: string): void {
     this.offEvent(domType);
+    const prefix = `Ошибка в обработчике события '${domType}':`;
+    const describe = (error: unknown): string =>
+      getErrorSnapshot(error) !== undefined
+        ? formatErrorReport(error)
+        : error instanceof Error
+          ? error.message
+          : String(error);
     const listener: EventListener = (event) => {
       try {
         const result = this.interpreter().executeInModule(code, { 'Событие': new BslDomEvent(event, this.ctx) });
         // Обработчик DOM нельзя дождаться: ошибки async-части не должны ломать страницу.
         void Promise.resolve(result).catch((e: unknown) => {
-          console.error(`Ошибка в обработчике события '${domType}':`, e instanceof Error ? e.message : e);
+          console.error(`${prefix} ${describe(e)}`);
         });
       } catch (e) {
-        console.error(`Ошибка в обработчике события '${domType}':`, e instanceof Error ? e.message : e);
+        console.error(`${prefix} ${describe(e)}`);
       }
     };
     let map = LISTENERS.get(this.element);

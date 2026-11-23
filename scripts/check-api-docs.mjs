@@ -78,9 +78,9 @@ function blockBody(source, start) {
 }
 
 /**
- * Case-метки, лежащие прямо в `switch` метода (глубина 1 внутри тела метода).
- * Метки вложенных switch (как `case 'win32'` в `СистемнаяИнформация.ИмяЯдра`)
- * публичным API не являются.
+ * Case-метки, лежащие прямо в `switch` метода: тело метода — глубина 1,
+ * `switch` внутри него — глубина 2, метки — тоже 2. Метки вложенных switch
+ * (глубже 2) публичным API не являются.
  */
 function publicCaseLabels(methodBody) {
   const labels = [];
@@ -88,7 +88,7 @@ function publicCaseLabels(methodBody) {
   for (const m of methodBody.matchAll(/\{|\}|case\s+'([^']+)'/g)) {
     if (m[0] === '{') depth++;
     else if (m[0] === '}') depth--;
-    else if (depth === 1 && m[1]) labels.push(m[1]);
+    else if (depth === 2 && m[1]) labels.push(m[1]);
   }
   return labels;
 }
