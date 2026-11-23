@@ -87,10 +87,10 @@ description: "Task list for feature 015 — embedded .osjs in HTML (layer A: ser
 
 ## Deferred (после слоя A)
 
-- [ ] D-1 Спека 017: тонкий клиент VS Code (манифест, documentSelector html, `.vsix`,
-  embedded language mode)
-- [ ] D-2 Грамматическая инъекция `<script type="text/osjs">` (override `source.js`) +
-  `embeddedLanguages` + тесты грамматики
+- [X] D-1 Спека 017: тонкий клиент VS Code (манифест, documentSelector html, `.vsix`,
+  embedded language mode) — реализовано спекой 017
+- [X] D-2 Грамматическая инъекция `<script type="text/osjs">` (override `source.js`) +
+  `embeddedLanguages` + тесты грамматики — реализовано спекой 018
 - [ ] D-3 Outline BSL внутри HTML (`documentSymbol`) — вне v1 по решению
 - [ ] D-4 `html.customData` для HTML-инструментов (если понадобится)
 

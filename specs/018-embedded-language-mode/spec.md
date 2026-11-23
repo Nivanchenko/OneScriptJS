@@ -234,6 +234,9 @@ pattern, фолдинг). Вне блока всё остаётся HTML.
 - **Зависимости**: 014 (грамматика `source.osjs`, `language-configuration`), 015 слой A
   (LSP в HTML), 017 (клиент VS Code/`.vsix` — реализован), `vscode-textmate`/`oniguruma`
   (тесты), VS Code HTML-грамматика (вендоренная фикстура).
-- **Открытые решения для реализации (не блокируют план)**: точный `injectionSelector`
-  (`L:text.html.basic` vs `L:source.js`), нужен ли `tokenTypes`, fallback, если инъекция
-  не переопределяет HTML-грамматику (тогда — обсуждение альтернатив до реализации).
+- **Решения приняты и подтверждены реализацией**: `injectionSelector` —
+  `L:text.html.basic - (comment.block, meta.embedded)`
+  ([`editors/osjs/osjs-embedded.tmLanguage.json`](../../editors/osjs/osjs-embedded.tmLanguage.json));
+  `tokenTypes` не нужен — используются `embeddedLanguages` и `language-configuration`;
+  fallback не понадобился — инъекция переопределяет HTML-грамматику. Открытых решений не
+  осталось.

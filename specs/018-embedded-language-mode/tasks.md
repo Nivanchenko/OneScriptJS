@@ -10,7 +10,7 @@ description: "Task list for feature 018 — embedded language mode (TextMate inj
 
 ## Phase 1: Setup
 
-- [ ] T001 Baseline: `pnpm typecheck && pnpm test` зелёные до изменений
+- [X] T001 Baseline: `pnpm typecheck && pnpm test` зелёные до изменений
 - [X] T002 Вендорить HTML-грамматику VS Code 1.146.0 в `tests/fixtures/vscode/`
   (`html.tmLanguage.json` + `NOTICE.md`: источник/версия/MIT) — из локальной установки
   `/Applications/Visual Studio Code.app/Contents/Resources/app/extensions/html/syntaxes/`

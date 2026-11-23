@@ -35,6 +35,6 @@
   допустимы.
 - Критический технический риск (переопределение HTML-грамматики инъекцией) вынесен в
   Assumptions и покрывается спайком в плане; это не пробел требований.
-- Открытые решения (`injectionSelector`, `tokenTypes`, fallback) — implementation-level,
-  не блокируют план.
+- Открытые решения (`injectionSelector`, `tokenTypes`, fallback) были implementation-level
+  и не блокировали план; закрыты реализацией (см. «Dependencies & Open Decisions»).
 - Вне объёма: форматирование, другие редакторы, изменения сервера, Marketplace.

@@ -64,18 +64,19 @@ description: "Task list for feature 017 — thin VS Code client"
   выполнена: hover/`gd`/автодополнение и прочее работают в `.osjs` и во встроенных блоках HTML
 - [X] T017 Коммит и push
 
-## Deferred (слой C, отдельная работа)
+## Deferred (слой C реализован спекой 018; Marketplace — вне scope)
 
-- [ ] D-1 Инъекционная TextMate-грамматика `<script type="text/osjs">` (override `source.js`)
-  + `embeddedLanguages` + тесты грамматики
-- [ ] D-2 Embedded language mode (переключение провайдеров по региону) в расширении
-- [ ] D-3 Marketplace-публикация/автообновление
+- [X] D-1 Инъекционная TextMate-грамматика `<script type="text/osjs">` (override `source.js`)
+  + `embeddedLanguages` + тесты грамматики — реализовано спекой 018
+- [X] D-2 Embedded language mode (переключение провайдеров по региону) в расширении —
+  реализовано спекой 018
+- [ ] D-3 Marketplace-публикация/автообновление — вне scope (только локальный `.vsix`)
 
 ## Dependencies & Execution Order
 
 T001 → T002 → T003/T004/T005 → T006–T009 → T010–T013 → T014–T017.
 T004 и T005 параллельны; T006 после T004; T010 после T006; T012 после T010.
-Слой C — после B, отдельной работой.
+Слой C — после B, отдельной работой (реализован спекой 018).
 
 ## Parallel Opportunities
 
