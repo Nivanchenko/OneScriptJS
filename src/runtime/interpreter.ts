@@ -17,7 +17,7 @@ import type {
   UnaryExpression,
   WhileLoop,
 } from '../ast/nodes';
-import { tokenize } from '../lexer/lexer';
+import { stripBom, tokenize } from '../lexer/lexer';
 import { parse } from '../parser/parser';
 import { preprocess } from '../parser/preprocessor';
 import { Ref, Scope } from './scope';
@@ -28,6 +28,19 @@ import { isBslObject } from './object';
 import type { BslObject } from './object';
 import { ScriptModuleObject } from './script-object';
 import { BslErrorInfo } from './error-info';
+import {
+  DEFAULT_SOURCE_ID,
+  EVAL_FRAME,
+  EXECUTE_FRAME,
+  HANDLER_FRAME,
+  MODULE_FRAME,
+  annotateError,
+  getErrorSnapshot,
+  setErrorSnapshot,
+  sourceLineAt,
+  splitSourceLines,
+} from './error-snapshot';
+import type { ErrorSnapshot, FrameSnapshot } from './error-snapshot';
 import { checkDynamicExpression, checkDynamicNames, collectFrameLocals } from './dynamic-names';
 import { BslPromise } from './promise';
 import type { BslGenerator, DriveOptions, MaybePromise, SliceController } from './async';
@@ -40,9 +53,52 @@ interface Ctx {
   moduleScope: Scope;
   moduleVars: Set<string>;
   exportedVars: Set<string>;
-  currentError: string | null;
+  /** Источники методов из `Выполнить`/`Вычислить`/обработчиков (иначе — модуль). */
+  methodSources: Map<string, MethodSource>;
+  currentError: ErrorSnapshot | null;
   /** Фоновое задание, в котором исполняется этот контекст (для `ПолучитьТекущее`). */
   currentJob?: unknown;
+}
+
+/** Источник метода, объявленного в динамическом фрагменте. */
+interface MethodSource {
+  module: string;
+  lines: readonly string[];
+}
+
+/** Кадр активного BSL-стека (изнутри наружу — при снятии снимка переворачивается). */
+interface ActiveFrame {
+  method: string;
+  module: string;
+  line: number;
+  /** Строки исходника этого кадра — для `ИсходнаяСтрока` верхнего кадра. */
+  lines: readonly string[];
+}
+
+/** Описание источника для `Interpreter` (модуль/фрагмент). */
+export interface InterpreterSource {
+  /** Идентификатор источника (`ИмяМодуля`); по умолчанию `<скрипт>`. */
+  id?: string;
+  /** Текст исходника — для `ИсходнаяСтрока`. */
+  text?: string;
+}
+
+/**
+ * Кадры вызывающего кода при переходе в другой `Interpreter` (модуль/класс):
+ * у каждого интерпретатора свой стек, но ошибка должна видеть цепочку вызовов.
+ * Живёт только на время синхронного входа в вызываемый интерпретатор; ссылка
+ * на массив, без копирования — кадры читаются вызываемым синхронно при входе.
+ */
+let callerFrames: readonly ActiveFrame[] | undefined;
+
+function withCallerFrames<T>(frames: readonly ActiveFrame[], action: () => T): T {
+  const previous = callerFrames;
+  callerFrames = frames;
+  try {
+    return action();
+  } finally {
+    callerFrames = previous;
+  }
 }
 
 class ReturnSignal {
@@ -51,9 +107,13 @@ class ReturnSignal {
 class BreakSignal {}
 class ContinueSignal {}
 class BslRuntimeError extends Error {
-  constructor(readonly description: string) {
+  constructor(
+    readonly description: string,
+    snapshot?: ErrorSnapshot,
+  ) {
     super(description);
     this.name = 'BslRuntimeError';
+    if (snapshot) setErrorSnapshot(this, snapshot);
   }
 }
 class GotoSignal {
@@ -77,8 +137,109 @@ export class Interpreter {
   private moduleObject?: ScriptModuleObject;
   /** Срез квантов: включается только у фоновых заданий. */
   slicer?: SliceController;
+  /** Идентификатор источника модуля (для `ИмяМодуля`). */
+  sourceId = DEFAULT_SOURCE_ID;
+  /** Текст модуля (для `ИсходнаяСтрока`). */
+  sourceText = '';
+  private moduleLines?: readonly string[];
+  /** Активный BSL-стек текущего invocation-а (устанавливается на каждом шаге drive). */
+  private frames: ActiveFrame[] = [];
 
-  constructor(readonly env: RuntimeEnvironment) {}
+  constructor(
+    readonly env: RuntimeEnvironment,
+    source?: InterpreterSource,
+  ) {
+    if (source?.id !== undefined) this.sourceId = source.id;
+    if (source?.text !== undefined) this.sourceText = source.text;
+  }
+
+  /** Строки исходника модуля (лениво). */
+  private get lines(): readonly string[] {
+    return (this.moduleLines ??= splitSourceLines(this.sourceText));
+  }
+
+  /** Кадры активного invocation-а изнутри наружу (первый — текущий). */
+  private snapshotFrames(): FrameSnapshot[] {
+    const result: FrameSnapshot[] = [];
+    for (let i = this.frames.length - 1; i >= 0; i--) {
+      const frame = this.frames[i]!;
+      result.push({ method: frame.method, module: frame.module, line: frame.line });
+    }
+    return result;
+  }
+
+  private pushFrame(method: string, module: string, lines: readonly string[]): void {
+    this.frames.push({ method, module, line: 0, lines });
+  }
+
+  private popFrame(): void {
+    this.frames.pop();
+  }
+
+  /** Кадр метода: для динамически объявленных — источник фрагмента, иначе — модуля. */
+  private pushMethodFrame(method: MethodDeclaration): void {
+    const source = this.moduleCtx?.methodSources.get(key(method.name));
+    this.pushFrame(method.name, source?.module ?? this.sourceId, source?.lines ?? this.lines);
+  }
+
+  /**
+   * Кадры нового invocation-а: при вызове из другого интерпретатора — копия
+   * кадров вызывающего (чтобы стек переживал границу модулей), иначе — свои.
+   */
+  private startFrames(): ActiveFrame[] {
+    if (this.frames.length > 0) return this.frames.map((frame) => ({ ...frame }));
+    if (callerFrames && callerFrames.length > 0) {
+      return callerFrames.map((frame) => ({ ...frame }));
+    }
+    return [];
+  }
+
+  /**
+   * Запускает генератор invocation-а, устанавливая его собственный стек кадров
+   * на каждом шаге: конкурентные async-вызовы на одном интерпретаторе не склеивают стеки.
+   */
+  private driveInvocation<T>(
+    generator: BslGenerator<T>,
+    frames: ActiveFrame[],
+    options: DriveOptions = {},
+  ): MaybePromise<T> {
+    const saved = this.frames;
+    this.frames = frames;
+    try {
+      return drive(generator, {
+        beforeStep: () => {
+          this.frames = frames;
+          options.beforeStep?.();
+        },
+        afterStep: () => {
+          options.afterStep?.();
+          this.frames = saved;
+        },
+      });
+    } finally {
+      this.frames = saved;
+    }
+  }
+
+  /** Аннотирует ошибку снимком текущего кадра (если снимка ещё нет). */
+  private annotateAtCurrent(error: unknown): void {
+    if (!(error instanceof Error) || getErrorSnapshot(error)) return;
+    const frame = this.frames[this.frames.length - 1];
+    annotateError(
+      error,
+      {
+        module: frame?.module ?? this.sourceId,
+        line: frame?.line ?? 0,
+        sourceLine: frame ? sourceLineAt(frame.lines, frame.line) : '',
+      },
+      this.snapshotFrames(),
+    );
+  }
+
+  /** Вызов объекта BSL с передачей кадров вызывающего в другой интерпретатор. */
+  private callObject<T>(action: () => MaybePromise<T>): MaybePromise<T> {
+    return withCallerFrames(this.frames, action);
+  }
 
   /** `ЭтотОбъект` — объект текущего модуля (лениво создаётся). */
   getThisObject(): BslObject {
@@ -106,12 +267,15 @@ export class Interpreter {
       moduleScope: source.moduleScope,
       moduleVars: source.moduleVars,
       exportedVars: source.exportedVars,
+      methodSources: source.methodSources,
       currentError: null,
       currentJob: task,
     };
     fork.ownerObject = this.ownerObject;
     fork.moduleObject = this.moduleObject;
     fork.slicer = new TimeSlicer();
+    fork.sourceId = this.sourceId;
+    fork.sourceText = this.sourceText;
     return fork;
   }
 
@@ -123,6 +287,7 @@ export class Interpreter {
       moduleScope: new Scope(),
       moduleVars: new Set(),
       exportedVars: new Set(),
+      methodSources: new Map(),
       currentError: null,
     };
     const env: RuntimeEnvironment = {
@@ -144,6 +309,7 @@ export class Interpreter {
       moduleScope: new Scope(),
       moduleVars: new Set(),
       exportedVars: new Set(),
+      methodSources: new Map(),
       currentError: null,
     };
     for (const stmt of program.body) {
@@ -166,11 +332,19 @@ export class Interpreter {
     // Слоты локалей кадра — до исполнения, чтобы динамический код видел их как
     // `Неопределено` даже до присваивания (как `_currentFrame.Locals` в эталоне).
     this.declareFrameLocals(executable, ctx.moduleScope);
-    return drive(this.runGen(executable, ctx.moduleScope, ctx));
+    return this.driveInvocation(
+      this.runGen(executable, ctx.moduleScope, ctx),
+      this.startFrames(),
+    );
   }
 
   private *runGen(executable: Statement[], scope: Scope, ctx: Ctx): BslGenerator<void> {
-    yield* this.execGotoBlock(executable, scope, ctx);
+    this.pushFrame(MODULE_FRAME, this.sourceId, this.lines);
+    try {
+      yield* this.execGotoBlock(executable, scope, ctx);
+    } finally {
+      this.popFrame();
+    }
   }
 
   /**
@@ -190,7 +364,7 @@ export class Interpreter {
 
   /** Вызывает метод модуля по имени с готовыми значениями (для тестового раннера). */
   invokeMethod(name: string, values: Value[]): MaybePromise<Value> {
-    return drive(this.invokeMethodGen(name, values));
+    return this.driveInvocation(this.invokeMethodGen(name, values), this.startFrames());
   }
 
   private *invokeMethodGen(name: string, values: Value[]): BslGenerator<Value> {
@@ -210,29 +384,48 @@ export class Interpreter {
         localScope.set(p.name, undefined);
       }
     }
+    this.pushMethodFrame(method);
     try {
-      yield* this.execGotoBlock(method.body, localScope, ctx);
-    } catch (e) {
-      if (e instanceof ReturnSignal) return e.value;
-      throw e;
+      try {
+        yield* this.execGotoBlock(method.body, localScope, ctx);
+      } catch (e) {
+        if (e instanceof ReturnSignal) return e.value;
+        throw e;
+      }
+      return undefined;
+    } finally {
+      this.popFrame();
     }
-    return undefined;
   }
 
   /**
    * Исполняет код в области видимости модуля (обработчики событий, REPL и т.п.).
    * Дополнительные переменные (`vars`) видны коду и не меняют модуль.
    */
-  executeInModule(source: string, vars?: Record<string, Value>): MaybePromise<void> {
-    return drive(this.executeInModuleGen(source, vars));
+  executeInModule(
+    source: string,
+    vars?: Record<string, Value>,
+    frame?: { method?: string; module?: string },
+  ): MaybePromise<void> {
+    return this.driveInvocation(
+      this.executeInModuleGen(source, vars, frame),
+      this.startFrames(),
+    );
   }
 
-  private *executeInModuleGen(source: string, vars?: Record<string, Value>): BslGenerator<void> {
+  private *executeInModuleGen(
+    source: string,
+    vars?: Record<string, Value>,
+    frame?: { method?: string; module?: string },
+  ): BslGenerator<void> {
     const ctx = this.moduleCtx;
     if (!ctx) throw new Error('Модуль ещё не выполнен');
     const scope = new Scope(ctx.moduleScope);
     if (vars) for (const [name, value] of Object.entries(vars)) scope.set(name, value);
-    yield* this.execDynamic(source, scope, ctx);
+    yield* this.execDynamic(source, scope, ctx, {
+      method: frame?.method ?? HANDLER_FRAME,
+      module: frame?.module ?? this.sourceId,
+    });
   }
 
   /** Есть ли у модуля метод с таким именем. */
@@ -250,7 +443,7 @@ export class Interpreter {
     if (!this.hasExportedMethod(name)) throw new Error(`Метод '${name}' не найден`);
     const method = this.requireCtx().methods.get(key(name));
     if (method?.isAsync) return this.startAsyncMethod(method, values);
-    return drive(this.invokeMethodGen(name, values), options);
+    return this.driveInvocation(this.invokeMethodGen(name, values), this.startFrames(), options);
   }
 
   /**
@@ -263,7 +456,7 @@ export class Interpreter {
     const promise = new BslPromise(this.env);
     let driven: MaybePromise<Value>;
     try {
-      driven = drive(this.invokeAsyncGen(method, values));
+      driven = this.driveInvocation(this.invokeAsyncGen(method, values), this.startFrames());
     } catch (error) {
       promise.reject(error);
       return promise;
@@ -292,13 +485,18 @@ export class Interpreter {
       // Параметры async-методов передаются только по значению (как в 1C).
       localScope.set(p.name, value);
     }
+    this.pushMethodFrame(method);
     try {
-      yield* this.execGotoBlock(method.body, localScope, ctx);
-    } catch (e) {
-      if (e instanceof ReturnSignal) return e.value;
-      throw e;
+      try {
+        yield* this.execGotoBlock(method.body, localScope, ctx);
+      } catch (e) {
+        if (e instanceof ReturnSignal) return e.value;
+        throw e;
+      }
+      return undefined;
+    } finally {
+      this.popFrame();
     }
-    return undefined;
   }
 
   /** Объявлена ли переменная с таким именем как экспортная. */
@@ -344,7 +542,10 @@ export class Interpreter {
    * `ОбработкаПолученияПредставления(Представление, СтандартнаяОбработка)`).
    */
   invokeMethodWithOutputs(name: string, values: Value[]): MaybePromise<Value[]> {
-    return drive(this.invokeMethodWithOutputsGen(name, values));
+    return this.driveInvocation(
+      this.invokeMethodWithOutputsGen(name, values),
+      this.startFrames(),
+    );
   }
 
   private *invokeMethodWithOutputsGen(name: string, values: Value[]): BslGenerator<Value[]> {
@@ -364,12 +565,17 @@ export class Interpreter {
     method.params.forEach((p, i) => {
       localScope.bindRef(p.name, new Ref(() => boxes[i], (v) => { boxes[i] = v; }));
     });
+    this.pushMethodFrame(method);
     try {
-      yield* this.execGotoBlock(method.body, localScope, ctx);
-    } catch (e) {
-      if (!(e instanceof ReturnSignal)) throw e;
+      try {
+        yield* this.execGotoBlock(method.body, localScope, ctx);
+      } catch (e) {
+        if (!(e instanceof ReturnSignal)) throw e;
+      }
+      return boxes;
+    } finally {
+      this.popFrame();
     }
-    return boxes;
   }
 
   private *execBlock(body: Statement[], scope: Scope, ctx: Ctx): BslGenerator<void> {
@@ -390,7 +596,11 @@ export class Interpreter {
       } catch (e) {
         if (e instanceof GotoSignal) {
           const target = labels.get(e.label);
-          if (target === undefined) throw new Error(`Метка '~${e.label}' не найдена`);
+          if (target === undefined) {
+            const error = new BslRuntimeError(`Метка '~${e.label}' не найдена`);
+            this.annotateAtCurrent(error);
+            throw error;
+          }
           i = target;
           continue;
         }
@@ -402,6 +612,18 @@ export class Interpreter {
 
   private *exec(stmt: Statement, scope: Scope, ctx: Ctx): BslGenerator<void> {
     if (this.slicer?.due()) yield yieldToHost();
+    // Позиция текущего кадра — строка оператора; снимок снимается при ошибке.
+    const frame = this.frames[this.frames.length - 1];
+    if (frame) frame.line = stmt.pos.line;
+    try {
+      yield* this.execStatement(stmt, scope, ctx);
+    } catch (e) {
+      this.annotateAtCurrent(e);
+      throw e;
+    }
+  }
+
+  private *execStatement(stmt: Statement, scope: Scope, ctx: Ctx): BslGenerator<void> {
     switch (stmt.kind) {
       case 'Assignment': {
         const value = yield* this.eval(stmt.value, scope, ctx);
@@ -451,14 +673,18 @@ export class Interpreter {
       case 'RaiseStatement': {
         const value =
           stmt.value === undefined ? undefined : (yield* this.eval(stmt.value, scope, ctx));
-        // Без аргумента `ВызватьИсключение;` перевыбрасывает текущее исключение.
-        const description =
-          value === undefined
-            ? (ctx.currentError ?? '')
-            : value instanceof BslErrorInfo
-              ? value.description
-              : toStringValue(value);
-        throw new BslRuntimeError(description);
+        // Без аргумента `ВызватьИсключение;` перевыбрасывает текущее исключение
+        // с исходным снимком: позиция и стек остаются от места возникновения.
+        if (value === undefined) {
+          const previous = ctx.currentError;
+          throw new BslRuntimeError(previous?.description ?? '', previous ?? undefined);
+        }
+        // `ВызватьИсключение ИнформацияОбОшибке()` сохраняет исходный снимок (R5).
+        if (value instanceof BslErrorInfo) {
+          throw new BslRuntimeError(value.description, value.snapshot);
+        }
+        // Новое значение — новый снимок в позиции строки перевыброса.
+        throw new BslRuntimeError(toStringValue(value));
       }
       case 'ExecuteStatement': {
         const source = toStringValue(yield* this.eval(stmt.value, scope, ctx));
@@ -581,7 +807,9 @@ export class Interpreter {
       // (Return/Break/Continue/Goto) — не Error, пропускаются.
       if (e instanceof Error) {
         const prev = ctx.currentError;
-        ctx.currentError = e instanceof BslRuntimeError ? e.description : e.message;
+        // Снимок уже снят на границе оператора возникновения; здесь — страховка.
+        this.annotateAtCurrent(e);
+        ctx.currentError = getErrorSnapshot(e) ?? null;
         try {
           yield* this.execBlock(stmt.exceptBody, scope, ctx);
         } finally {
@@ -639,7 +867,7 @@ export class Interpreter {
       }
       case 'NewObjectExpression': {
         const args = yield* this.evalArgs(expr.args, scope, ctx);
-        return yield* yieldMaybe(this.env.construct(expr.typeName, args));
+        return yield* yieldMaybe(this.callObject(() => this.env.construct(expr.typeName, args)));
       }
     }
   }
@@ -718,17 +946,19 @@ export class Interpreter {
       }
       // shortcut: ОписаниеОшибки/ИнформацияОбОшибке живут здесь — нужен доступ к текущему исключению.
       if (lower === 'описаниеошибки' || lower === 'errordescription') {
-        return ctx.currentError ?? '';
+        return ctx.currentError?.description ?? '';
       }
       if (lower === 'информацияобошибке' || lower === 'errorinfo') {
-        return new BslErrorInfo(ctx.currentError ?? '');
+        return new BslErrorInfo(ctx.currentError ?? undefined);
       }
       // shortcut: ВызватьСобытие живёт здесь — событие объявляется на объекте текущего модуля.
       if (lower === 'вызватьсобытие' || lower === 'raiseevent') {
         const name = toStringValue(yield* this.eval(expr.args[0]!, scope, ctx));
         const value = expr.args[1] === undefined ? undefined : yield* this.eval(expr.args[1]!, scope, ctx);
         const params = isBslObject(value) && value.iterate ? value.iterate() : [];
-        yield* yieldMaybe(this.env.events?.raise(this.getThisObject(), name, params));
+        yield* yieldMaybe(
+          this.callObject(() => this.env.events?.raise(this.getThisObject(), name, params)),
+        );
         return undefined;
       }
       const method = ctx.methods.get(lower);
@@ -748,8 +978,9 @@ export class Interpreter {
       if (!isBslObject(obj)) {
         throw new Error(`Метод '${expr.callee.property}' недоступен для ${typeName(obj)}`);
       }
+      const property = expr.callee.property;
       const args = yield* this.evalArgs(expr.args, scope, ctx);
-      return yield* yieldMaybe(obj.callMethod(expr.callee.property, args));
+      return yield* yieldMaybe(this.callObject(() => obj.callMethod(property, args)));
     }
 
     throw new Error('Недопустимый вызов функции');
@@ -795,13 +1026,18 @@ export class Interpreter {
         localScope.bindRef(p.name, yield* this.resolveRef(argExpr, scope, ctx));
       }
     }
+    this.pushMethodFrame(method);
     try {
-      yield* this.execGotoBlock(method.body, localScope, ctx);
-    } catch (e) {
-      if (e instanceof ReturnSignal) return e.value;
-      throw e;
+      try {
+        yield* this.execGotoBlock(method.body, localScope, ctx);
+      } catch (e) {
+        if (e instanceof ReturnSignal) return e.value;
+        throw e;
+      }
+      return undefined;
+    } finally {
+      this.popFrame();
     }
-    return undefined;
   }
 
   /** Разрешает выражение-аргумент в ссылку (по ссылке); для не-lvalue — временная ячейка. */
@@ -861,11 +1097,27 @@ export class Interpreter {
     } catch (e) {
       throw new BslRuntimeError(e instanceof Error ? e.message : String(e));
     }
-    return yield* this.eval(expr, scope, ctx);
+    // Кадр динамического фрагмента: своя строка исходника и маркер `<Вычислить>`.
+    this.pushFrame(EVAL_FRAME, EVAL_FRAME, splitSourceLines(stripBom(code)));
+    const frame = this.frames[this.frames.length - 1];
+    if (frame) frame.line = expr.pos.line;
+    try {
+      return yield* this.eval(expr, scope, ctx);
+    } catch (e) {
+      this.annotateAtCurrent(e);
+      throw e;
+    } finally {
+      this.popFrame();
+    }
   }
 
   /** `Выполнить строка` — исполняет операторы в области текущего контекста. */
-  private *execDynamic(source: string, scope: Scope, ctx: Ctx): BslGenerator<void> {
+  private *execDynamic(
+    source: string,
+    scope: Scope,
+    ctx: Ctx,
+    frame?: { method?: string; module?: string },
+  ): BslGenerator<void> {
     let program: Program;
     try {
       program = Interpreter.compileDynamic(source);
@@ -884,12 +1136,15 @@ export class Interpreter {
     // видят эту область. Родитель — текущая область, поэтому локальные
     // переменные вызывающего кода по-прежнему доступны.
     const dynamicScope = new Scope(scope);
+    const dynamicLines = splitSourceLines(stripBom(source));
+    const dynamicModule = frame?.module ?? EXECUTE_FRAME;
     const executable: Statement[] = [];
     for (const stmt of program.body) {
       if (stmt.kind === 'MethodDeclaration') {
         const name = key(stmt.name);
         ctx.methods.set(name, stmt);
         ctx.methodScopes.set(name, dynamicScope);
+        ctx.methodSources.set(name, { module: dynamicModule, lines: dynamicLines });
       } else if (stmt.kind === 'VariableDeclaration') {
         for (const name of stmt.names) dynamicScope.declare(name);
       } else {
@@ -899,13 +1154,22 @@ export class Interpreter {
     // Слоты локалей фрагмента — до исполнения: вложенный код видит их как
     // `Неопределено`, а присваивание видимой локали меняет её, а не создаёт тень.
     this.declareFrameLocals(executable, dynamicScope);
+    this.pushFrame(
+      frame?.method ?? EXECUTE_FRAME,
+      frame?.module ?? EXECUTE_FRAME,
+      dynamicLines,
+    );
     try {
       yield* this.execGotoBlock(executable, dynamicScope, ctx);
     } catch (e) {
-      if (e instanceof ReturnSignal) {
-        throw new BslRuntimeError('Оператор "Возврат" может использоваться только внутри метода');
-      }
-      throw e;
+      const error =
+        e instanceof ReturnSignal
+          ? new BslRuntimeError('Оператор "Возврат" может использоваться только внутри метода')
+          : e;
+      this.annotateAtCurrent(error);
+      throw error;
+    } finally {
+      this.popFrame();
     }
   }
 

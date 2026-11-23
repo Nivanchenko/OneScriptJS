@@ -17,6 +17,11 @@ const OPERATOR_CHARS = new Set([
   '(', ')', ',', '.', '[', ']', '?', '~', '&', ':',
 ]);
 
+/** Снимает BOM (U+FEFF) в начале исходника: он не должен попадать в тексты строк. */
+export function stripBom(source: string): string {
+  return source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
+}
+
 export interface TokenizeOptions {
   /** Эмитировать `//`-комментарии токенами `Comment` (для semantic tokens). */
   includeTrivia?: boolean;

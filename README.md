@@ -569,6 +569,7 @@ pnpm oscript script.osjs
 | [`http.html`](examples/http.html) | `HTTPСоединение` GET/POST к мок-API, JSON-ответ |
 | [`jobs.html`](examples/jobs.html) | фоновые задания и `Приостановить`, живая страница |
 | [`async.html`](examples/async.html) | `Асинх`/`Ждать` и `Обещание` |
+| [`errors.html`](examples/errors.html) | позиция (модуль/строка) и BSL-стек ошибки через `ИнформацияОбОшибке`, формат CLI/`console.error` |
 
 ## Разработка
 

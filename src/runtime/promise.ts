@@ -2,6 +2,7 @@ import type { BslObject } from './object';
 import type { Value } from './values';
 import type { RuntimeEnvironment } from './context';
 import type { MaybePromise } from './async';
+import { formatErrorReport } from './error-snapshot';
 
 export type PromiseState = 'pending' | 'fulfilled' | 'rejected';
 
@@ -90,7 +91,7 @@ export class BslPromise implements BslObject, AsyncTracker {
     setTimeout(() => {
       if (this.awaited) return;
       if (this.env.reportUnhandledError) this.env.reportUnhandledError(this.error);
-      else console.error(this.error instanceof Error ? this.error.message : String(this.error));
+      else console.error(formatErrorReport(this.error));
     }, 0);
   }
 

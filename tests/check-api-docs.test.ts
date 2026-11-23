@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -23,6 +23,21 @@ describe('check-api-docs', () => {
     const result = runCheck([]);
     expect(result.stderr).toBe('');
     expect(result.stdout).toContain('OK: все публичные имена API упомянуты');
+  });
+
+  it('ловит недокументированное case-свойство BslObject (регресс глубины)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'onescriptjs-docs-'));
+    const docs = join(dir, 'reference.md');
+    const original = readFileSync(join(process.cwd(), 'docs/reference.md'), 'utf8');
+    // Убираем документирование `ИмяМодуля` (case-метка BslObject) — чекер обязан упасть.
+    writeFileSync(docs, original.replace(/ИмяМодуля/g, 'ИмяМодуляX'));
+    try {
+      const result = runCheck(['--docs', docs]);
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain('имямодуля');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('падает и перечисляет пропуски, если справочник пуст', () => {

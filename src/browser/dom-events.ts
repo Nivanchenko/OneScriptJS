@@ -1,4 +1,5 @@
 import type { GlobalContext } from '../runtime/context';
+import { formatErrorReport, getErrorSnapshot } from '../runtime/error-snapshot';
 import { BslDomEvent, domEventType } from './dom';
 
 /**
@@ -41,6 +42,12 @@ function resolveContext(element: Element): GlobalContext | undefined {
   return scriptContexts.get(DEFAULT_SCRIPT);
 }
 
+/** Текст ошибки обработчика: со снимком — позиция и стек, иначе — сообщение. */
+function describeHandlerError(error: unknown): string {
+  if (getErrorSnapshot(error) !== undefined) return formatErrorReport(error);
+  return error instanceof Error ? error.message : String(error);
+}
+
 function makeHandler(element: Element, code: string): (event: Event) => void {
   return (event: Event) => {
     const ctx = resolveContext(element);
@@ -52,14 +59,15 @@ function makeHandler(element: Element, code: string): (event: Event) => void {
       }
       return;
     }
+    const prefix = `Ошибка в обработчике '${ATTRIBUTE_PREFIX}${event.type}':`;
     try {
       const result = interpreter.executeInModule(code, { 'Событие': new BslDomEvent(event, ctx) });
       // DOM-событие нельзя дождаться: ошибки async-части логируем, страницу не роняем.
       void Promise.resolve(result).catch((e: unknown) => {
-        console.error(`Ошибка в обработчике '${ATTRIBUTE_PREFIX}${event.type}':`, e instanceof Error ? e.message : e);
+        console.error(`${prefix} ${describeHandlerError(e)}`);
       });
     } catch (e) {
-      console.error(`Ошибка в обработчике '${ATTRIBUTE_PREFIX}${event.type}':`, e instanceof Error ? e.message : e);
+      console.error(`${prefix} ${describeHandlerError(e)}`);
     }
   };
 }

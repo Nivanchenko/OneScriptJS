@@ -1,7 +1,8 @@
-import { tokenize } from '../lexer/lexer';
+import { stripBom, tokenize } from '../lexer/lexer';
 import { parse } from '../parser/parser';
 import { preprocessScript } from '../parser/preprocessor';
 import { Interpreter } from '../runtime/interpreter';
+import { DEFAULT_SOURCE_ID } from '../runtime/error-snapshot';
 import type { GlobalContext } from '../runtime/context';
 import type { BslObject } from '../runtime/object';
 import type { Value } from '../runtime/values';
@@ -123,7 +124,7 @@ export function loadScriptFromSource(
 ): MaybePromise<BslScript> {
   const { tokens, imports } = preprocessScript(tokenize(source));
   const runBody = (): MaybePromise<BslScript> => {
-    const interpreter = new Interpreter(env);
+    const interpreter = new Interpreter(env, { id: path ?? DEFAULT_SOURCE_ID, text: stripBom(source) });
     // `ЭтотОбъект`/`ВызватьСобытие` внутри сценария относятся к объекту этого сценария.
     const scriptObject = new BslScript(interpreter, path);
     interpreter.ownerObject = scriptObject;

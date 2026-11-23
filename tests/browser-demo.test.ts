@@ -193,6 +193,24 @@ describe('демо-страницы examples/', () => {
     expect(code.value).toContain('Для');
   });
 
+  it('errors.html: показывает позицию и стек ошибки в DOM и console.error', async () => {
+    const errors: unknown[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => errors.push(...args));
+
+    const window = await loadDemo('errors.html');
+
+    const output = window.document.getElementById('вывод')?.textContent ?? '';
+    expect(output).toContain('Деление на ноль');
+    expect(output).toContain('http://localhost/app/#block1');
+    expect(output).toContain('Сломать');
+    expect(output).toContain('Стек вызовов:');
+
+    expect(errors).toHaveLength(1);
+    const text = String(errors[0]);
+    expect(text).toContain('намеренная ошибка без Попытка');
+    expect(text).toMatch(/http:\/\/localhost\/app\/#block2:\d+: намеренная ошибка/);
+  });
+
   it('form.html: submit отменяется, приветствие показывается', async () => {
     const window = await loadDemo('form.html');
     const form = window.document.getElementById('форма') as unknown as HTMLElement;

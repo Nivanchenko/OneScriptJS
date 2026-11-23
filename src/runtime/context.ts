@@ -4,6 +4,7 @@ import type { AsyncTracker } from './promise';
 import type { BslObject } from './object';
 import type { Interpreter } from './interpreter';
 import { EventProcessor } from './events';
+import { formatErrorReport } from './error-snapshot';
 import type { ImportDirective } from '../parser/preprocessor';
 
 /** Глобальная функция BSL: принимает значения аргументов, возвращает значение или Promise. */
@@ -122,6 +123,6 @@ export class GlobalContext implements RuntimeEnvironment {
   }
 
   reportUnhandledError(error: unknown): void {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(formatErrorReport(error));
   }
 }

@@ -6,6 +6,7 @@ import type { MaybePromise } from '../../runtime/async';
 import { isThenable, waitWithTimeout } from '../../runtime/async';
 import { ScriptModuleObject } from '../../runtime/script-object';
 import { BslErrorInfo } from '../../runtime/error-info';
+import { getErrorSnapshot } from '../../runtime/error-snapshot';
 import { BslEnumValue } from '../../runtime/enum';
 import { BslArray } from '../collections/array';
 import { BslUniqueIdentifier } from '../uuid';
@@ -91,7 +92,16 @@ export class BslBackgroundTask implements BslObject {
 
   private finishWithError(error: unknown): void {
     this.state = 'ЗавершеноАварийно';
-    this.error = new BslErrorInfo(error instanceof Error ? error.message : String(error));
+    const description = error instanceof Error ? error.message : String(error);
+    // Снимок уже снят в интерпретаторе задания; без него — деградация без позиции.
+    const snapshot = getErrorSnapshot(error) ?? {
+      description,
+      module: '',
+      line: 0,
+      sourceLine: '',
+      frames: [],
+    };
+    this.error = new BslErrorInfo(snapshot);
     this.registry.markCompleted(this);
     this.resolveCompletion();
   }

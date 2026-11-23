@@ -1,5 +1,5 @@
 import type { Program } from '../ast/nodes';
-import { tokenize } from '../lexer/lexer';
+import { stripBom, tokenize } from '../lexer/lexer';
 import { parse } from '../parser/parser';
 import { preprocessScript } from '../parser/preprocessor';
 import type { ImportDirective } from '../parser/preprocessor';
@@ -18,6 +18,8 @@ export interface ScriptModuleDef {
   kind: ScriptKind;
   program: Program;
   imports: ImportDirective[];
+  /** Исходный текст модуля — для `ИсходнаяСтрока` в снимке ошибки. */
+  source: string;
 }
 
 interface CacheEntry {
@@ -88,7 +90,7 @@ export function parseModuleSource(path: string, source: string): ScriptModuleDef
     ? 'class'
     : 'module';
 
-  return { path, name, kind, program, imports };
+  return { path, name, kind, program, imports, source: stripBom(source) };
 }
 
 /**
@@ -154,7 +156,7 @@ export class ModuleLoader {
         this.registerModule(def.name, module);
         return track(
           thenMaybe(this.importAll(def.imports, resolved), () => {
-            const interpreter = new Interpreter(this.env);
+            const interpreter = new Interpreter(this.env, { id: def.path, text: def.source });
             return thenMaybe(interpreter.run(def.program), () => {
               module.attach(interpreter);
               entry.state = 'ready';
@@ -202,7 +204,7 @@ export class ModuleLoader {
   }
 
   private createInstance(def: ScriptModuleDef, args: Value[]): MaybePromise<BslInstance> {
-    const interpreter = new Interpreter(this.env);
+    const interpreter = new Interpreter(this.env, { id: def.path, text: def.source });
     return thenMaybe(interpreter.run(def.program), () => this.finishInstance(def, interpreter, args));
   }
 
