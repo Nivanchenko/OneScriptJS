@@ -18,6 +18,10 @@ export interface RuntimeEnvironment {
   construct(typeName: string, args: Value[]): MaybePromise<Value>;
   /** Резолвит глобальное значение (перечисление и т.п.); undefined, если нет. */
   resolveGlobal?(name: string): Value | undefined;
+  /** Зарегистрировано ли глобальное значение; нужен проверке имён динамического кода. */
+  hasGlobal?(name: string): boolean;
+  /** Есть ли глобальная функция с таким именем; нужен проверке имён динамического кода. */
+  hasFunction?(name: string): boolean;
   /** Реестр подписок на события (у стандартного контекста есть всегда). */
   events?: EventProcessor;
   /** Дождаться активных фоновых заданий и незавершённых `Обещаний` перед завершением. */
@@ -90,6 +94,10 @@ export class GlobalContext implements RuntimeEnvironment {
 
   hasType(name: string): boolean {
     return this.types.has(name.toLowerCase());
+  }
+
+  hasFunction(name: string): boolean {
+    return this.functions.has(name.toLowerCase());
   }
 
   call(name: string, args: Value[]): MaybePromise<Value> {
