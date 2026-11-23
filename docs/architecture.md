@@ -51,6 +51,9 @@ OneScript — открытая реализация языка, совмести
 - `Machine/*` — `MachineInstance`/`StackMachineExecutor` (командный цикл, стек,
   кадры, исключения, итераторы), `ExecutionContext`, `BuiltinFunctions`.
 - `Hosting/*`, `ScriptingEngine.cs` — фасад движка, DI, загрузка сборок.
+- `dynamic-names.ts` — предварительное разрешение имён динамического кода
+  (`Выполнить`/`Вычислить`), аналог таблицы символов/`SymbolNotFound` эталонного
+  компилятора (слоты локалей кадра + текстовый проход).
 
 ### 4. OneScript.StandardLibrary → `src/stdlib`
 

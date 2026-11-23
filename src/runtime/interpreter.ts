@@ -28,6 +28,7 @@ import { isBslObject } from './object';
 import type { BslObject } from './object';
 import { ScriptModuleObject } from './script-object';
 import { BslErrorInfo } from './error-info';
+import { checkDynamicExpression, checkDynamicNames, collectFrameLocals } from './dynamic-names';
 import { BslPromise } from './promise';
 import type { BslGenerator, DriveOptions, MaybePromise, SliceController } from './async';
 import { TimeSlicer, drive, isThenable, yieldMaybe, yieldToHost } from './async';
@@ -162,11 +163,29 @@ export class Interpreter {
     // Модуль «существует» уже во время исполнения своего тела: `ЭтотОбъект` и
     // события должны работать в том числе из инициализирующего кода.
     this.moduleCtx = ctx;
+    // Слоты локалей кадра — до исполнения, чтобы динамический код видел их как
+    // `Неопределено` даже до присваивания (как `_currentFrame.Locals` в эталоне).
+    this.declareFrameLocals(executable, ctx.moduleScope);
     return drive(this.runGen(executable, ctx.moduleScope, ctx));
   }
 
   private *runGen(executable: Statement[], scope: Scope, ctx: Ctx): BslGenerator<void> {
     yield* this.execGotoBlock(executable, scope, ctx);
+  }
+
+  /**
+   * Материализует локальные имена кадра до исполнения тела: эталон выделяет слоты
+   * всех локалей на компиляции, поэтому динамический код видит их как `Неопределено`.
+   */
+  private declareFrameLocals(body: Statement[], scope: Scope): void {
+    const { declared, assigned } = collectFrameLocals(body);
+    // Явные `Перем` — локальные этого кадра (тень внешних имён, как в эталоне).
+    for (const name of declared) scope.declare(name);
+    // Присваивание создаёт локаль, только если имя не видно из внешних областей
+    // (иначе это запись в переменную модуля/вызывающего) — как VisitVariableWrite.
+    for (const name of assigned) {
+      if (scope.findBinding(name) === undefined) scope.declare(name);
+    }
   }
 
   /** Вызывает метод модуля по имени с готовыми значениями (для тестового раннера). */
@@ -180,6 +199,7 @@ export class Interpreter {
     const method = ctx.methods.get(key(name));
     if (!method) throw new Error(`Метод '${name}' не найден`);
     const localScope = new Scope(ctx.methodScopes.get(key(name)) ?? ctx.moduleScope);
+    this.declareFrameLocals(method.body, localScope);
     for (let i = 0; i < method.params.length; i++) {
       const p = method.params[i]!;
       if (i < values.length) {
@@ -262,6 +282,7 @@ export class Interpreter {
   private *invokeAsyncGen(method: MethodDeclaration, values: Value[]): BslGenerator<Value> {
     const ctx = this.requireCtx();
     const localScope = new Scope(ctx.methodScopes.get(key(method.name)) ?? ctx.moduleScope);
+    this.declareFrameLocals(method.body, localScope);
     for (let i = 0; i < method.params.length; i++) {
       const p = method.params[i]!;
       let value: Value;
@@ -331,6 +352,8 @@ export class Interpreter {
     if (!ctx) throw new Error('Модуль ещё не выполнен');
     const method = ctx.methods.get(key(name));
     if (!method) throw new Error(`Метод '${name}' не найден`);
+    const localScope = new Scope(ctx.moduleScope);
+    this.declareFrameLocals(method.body, localScope);
     const boxes: Value[] = [];
     for (let i = 0; i < method.params.length; i++) {
       const p = method.params[i]!;
@@ -338,7 +361,6 @@ export class Interpreter {
       else if (p.defaultValue) boxes.push(yield* this.eval(p.defaultValue, ctx.moduleScope, ctx));
       else boxes.push(undefined);
     }
-    const localScope = new Scope(ctx.moduleScope);
     method.params.forEach((p, i) => {
       localScope.bindRef(p.name, new Ref(() => boxes[i], (v) => { boxes[i] = v; }));
     });
@@ -757,6 +779,7 @@ export class Interpreter {
     ctx: Ctx,
   ): BslGenerator<Value> {
     const localScope = new Scope(ctx.methodScopes.get(key(method.name)) ?? ctx.moduleScope);
+    this.declareFrameLocals(method.body, localScope);
     for (let i = 0; i < method.params.length; i++) {
       const p = method.params[i]!;
       const argExpr = argExprs[i];
@@ -831,7 +854,14 @@ export class Interpreter {
     const program = Interpreter.compileDynamic(`сообщить(${code});`);
     const stmt = program.body[0] as ExpressionStatement;
     const call = stmt.expression as CallExpression;
-    return yield* this.eval(call.args[0]!, scope, ctx);
+    const expr = call.args[0]!;
+    // Проверка до `eval`: неразрешённое имя — ошибка, а не `Неопределено`.
+    try {
+      checkDynamicExpression(expr, { scope, methods: ctx.methods, env: this.env });
+    } catch (e) {
+      throw new BslRuntimeError(e instanceof Error ? e.message : String(e));
+    }
+    return yield* this.eval(expr, scope, ctx);
   }
 
   /** `Выполнить строка` — исполняет операторы в области текущего контекста. */
@@ -839,6 +869,13 @@ export class Interpreter {
     let program: Program;
     try {
       program = Interpreter.compileDynamic(source);
+    } catch (e) {
+      throw new BslRuntimeError(e instanceof Error ? e.message : String(e));
+    }
+    // Проверка имён — до регистрации методов/`Перем`: при ошибке фрагмент не должен
+    // оставлять следов ни в `ctx`, ни в области видимости.
+    try {
+      checkDynamicNames(program, { scope, methods: ctx.methods, env: this.env });
     } catch (e) {
       throw new BslRuntimeError(e instanceof Error ? e.message : String(e));
     }
@@ -859,6 +896,9 @@ export class Interpreter {
         executable.push(stmt);
       }
     }
+    // Слоты локалей фрагмента — до исполнения: вложенный код видит их как
+    // `Неопределено`, а присваивание видимой локали меняет её, а не создаёт тень.
+    this.declareFrameLocals(executable, dynamicScope);
     try {
       yield* this.execGotoBlock(executable, dynamicScope, ctx);
     } catch (e) {

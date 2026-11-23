@@ -521,3 +521,24 @@ describe('script[type="text/osjs"]: импорты (US1)', () => {
     expect(logs).toEqual(['первый', 'второй']);
   });
 });
+
+describe('script[type="text/osjs"]: динамическое исполнение (спека 006)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('ошибка неразрешённого имени в Выполнить ловится Попыткой и видна в ОписаниеОшибки', async () => {
+    const logs = captureLogs();
+    renderPage([
+      makeScriptBlock(
+        'Попытка\n  Выполнить "Х = Х + 1";\nИсключение\n  Сообщить("Поймано: " + ОписаниеОшибки());\nКонецПопытки;',
+      ),
+    ]);
+
+    await runEngine();
+    await flush();
+
+    expect(logs).toEqual(['Поймано: Неизвестный символ: Х']);
+  });
+});
