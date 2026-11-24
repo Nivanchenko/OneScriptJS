@@ -110,3 +110,36 @@ describe('UrlMap: файл → URL', () => {
     expect(map.toSourceId(file)).toBe('http://localhost:5173/app.osjs');
   });
 });
+
+describe('UrlMap: страница в подкаталоге (импортированные модули)', () => {
+  it('резолвит URL от корня webRoot, а не от URL страницы', () => {
+    makeFile('examples/modules.html', '<html></html>');
+    const file = makeFile('examples/lib/Модуль.osjs');
+    const pageUrl = 'http://localhost:5173/examples/modules.html';
+    const map = new UrlMap({ webRoot: root });
+    map.setPageUrl(pageUrl);
+    map.setBaseURI(pageUrl);
+    // Движок строит URL модуля от страницы: new URL('lib/Модуль.osjs', pageUrl).
+    expect(map.toSourceId(file)).toBe(new URL('lib/Модуль.osjs', pageUrl).href);
+  });
+
+  it('учитывает dev-base /OneScriptJS/ от страницы в подкаталоге', () => {
+    makeFile('examples/modules.html', '<html></html>');
+    const file = makeFile('examples/lib/Модуль.osjs');
+    const pageUrl = 'http://localhost:5173/OneScriptJS/examples/modules.html';
+    const map = new UrlMap({ webRoot: root });
+    map.setPageUrl(pageUrl);
+    map.setBaseURI(pageUrl);
+    expect(map.toSourceId(file)).toBe(new URL('lib/Модуль.osjs', pageUrl).href);
+  });
+
+  it('страница в корне webRoot — корень отдаётся как есть', () => {
+    makeFile('index.html', '<html></html>');
+    const file = makeFile('lib/app.osjs');
+    const pageUrl = 'http://localhost:5173/index.html';
+    const map = new UrlMap({ webRoot: root });
+    map.setPageUrl(pageUrl);
+    map.setBaseURI(pageUrl);
+    expect(map.toSourceId(file)).toBe('http://localhost:5173/lib/app.osjs');
+  });
+});

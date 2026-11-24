@@ -398,6 +398,9 @@ export class OsjsDebugSession extends LoggingDebugSession {
   private async handleHello(state: AttachState, message: HelloMessage): Promise<void> {
     if (state.helloSeen) return;
     state.helloSeen = true;
+    // URL страницы + baseURI дают URL-корень webRoot: без него импортированные
+    // модули получают двойной префикс каталога страницы и брейкпоинты не срабатывают.
+    state.urlMap.setPageUrl(message.pageUrl);
     state.urlMap.setBaseURI(message.baseURI);
     for (const block of message.blocks) this.registerBlockSource(state, message, block);
     // Маппинг HTML-строк нужен до helloAck: клиент пришлёт setBreakpoints сразу после него.
@@ -1121,6 +1124,13 @@ export class OsjsDebugSession extends LoggingDebugSession {
         if (pagePath !== undefined) return new Source(basename(pagePath), pagePath);
       }
       return new Source(sourceId);
+    }
+    // Импортированные модули не приходят в манифесте (их грузит движок), поэтому
+    // URL кадра мапим на файл рабочей области через webRoot — иначе шаг «внутрь»
+    // упирается в источник без содержимого.
+    if (this.attach !== undefined) {
+      const path = this.attach.urlMap.toFilePath(sourceId);
+      if (path !== undefined) return new Source(basename(path), path);
     }
     return isAbsolute(sourceId)
       ? new Source(basename(sourceId), sourceId)
