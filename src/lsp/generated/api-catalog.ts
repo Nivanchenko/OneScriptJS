@@ -3849,7 +3849,7 @@ export const API_CATALOG = {
           "en": "Version",
           "type": "Строка",
           "access": "read",
-          "description": "Версия движка (в текущей сборке — `0.1.1`)"
+          "description": "Версия движка (в текущей сборке — `0.2.0`)"
         },
         {
           "ru": "ТипПлатформы",
