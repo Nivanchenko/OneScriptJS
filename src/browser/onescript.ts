@@ -14,6 +14,8 @@
  */
 import { run } from '../runtime/runner';
 import { formatErrorReport, getErrorSnapshot } from '../runtime/error-snapshot';
+import type { DebugController } from '../runtime/debug/controller';
+import type { AttachBlock } from '../debug/page-protocol';
 import { preloadModuleSources, resolveUrlPath } from './module-source';
 import { createBrowserGlobalContext } from './context';
 import { registerScriptContext, scheduleDeclarativeBinding } from './dom-events';
@@ -74,12 +76,48 @@ async function blockSource(
   }
 }
 
+/** Блок в манифесте page-agent: только то, что нужно отладчику. */
+function blockManifest(block: HTMLScriptElement): AttachBlock {
+  const entry: AttachBlock = { text: block.textContent ?? '' };
+  if (block.id !== '') entry.id = block.id;
+  const src = block.getAttribute('src');
+  if (src !== null && src.trim() !== '') entry.src = src;
+  return entry;
+}
+
+/**
+ * Гейт до `configurationDone`: мост отладчика создаёт контроллер до старта блоков.
+ * Без моста (`globalThis.__OSJS_DEBUG__` нет) страница исполняется как раньше.
+ */
+async function attachDebugger(
+  doc: Document,
+  blocks: readonly HTMLScriptElement[],
+): Promise<DebugController | null> {
+  const bridge = globalThis.__OSJS_DEBUG__;
+  if (bridge === undefined) return null;
+  try {
+    return await bridge.attach({
+      pageUrl: doc.URL,
+      baseURI: doc.baseURI,
+      blocks: blocks.map(blockManifest),
+    });
+  } catch (error) {
+    console.error('Отладчик недоступен:', error);
+    return null;
+  }
+}
+
 /** Свежий контекст на блок; ошибка блока уходит в `console.error`, не прерывая остальные. */
-async function executeBlock(block: HTMLScriptElement, index: number): Promise<void> {
+async function executeBlock(
+  block: HTMLScriptElement,
+  index: number,
+  controller: DebugController | null,
+): Promise<void> {
   const doc = block.ownerDocument;
   try {
     const { source, url } = await blockSource(block);
     const ctx = createBrowserGlobalContext();
+    if (controller !== null) ctx.debug = controller;
     // Контекст нужен декларативным обработчикам (`data-os-*`) в этом блоке.
     registerScriptContext(block.id || null, ctx);
     const entryUrl = url ?? doc.baseURI;
@@ -105,8 +143,10 @@ async function executeBlock(block: HTMLScriptElement, index: number): Promise<vo
 /** Последовательный `await` сохраняет порядок документа даже при асинхронной предзагрузке. */
 async function runAll(doc: Document): Promise<void> {
   const blocks = collectBlocks(doc);
+  // Контроллер один на страницу: DOM-входы соседних блоков видят ту же паузу.
+  const controller = await attachDebugger(doc, blocks);
   for (let i = 0; i < blocks.length; i++) {
-    await executeBlock(blocks[i]!, i + 1);
+    await executeBlock(blocks[i]!, i + 1, controller);
   }
 }
 

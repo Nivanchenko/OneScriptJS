@@ -27,7 +27,9 @@
     "onLanguage:osjs",
     "onLanguage:html",
     "onCommand:onescriptjs.restartServer",
-    "onCommand:onescriptjs.showOutput"
+    "onCommand:onescriptjs.showOutput",
+    "onDebugResolve:osjs",
+    "onDebugInitialConfigurations"
   ],
   "contributes": {
     "languages": [
@@ -69,6 +71,112 @@
       {
         "command": "onescriptjs.showOutput",
         "title": "OneScriptJS: Show Output"
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "osjs"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "osjs",
+        "label": "OneScriptJS (BSL)",
+        "languages": [
+          "osjs",
+          "html"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Файл .osjs для запуска (абсолютный или относительно cwd).",
+                "default": "${file}"
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Рабочий каталог запуска.",
+                "default": "${workspaceFolder}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Остановиться на первом исполняемом операторе.",
+                "default": false
+              }
+            }
+          },
+          "attach": {
+            "required": [
+              "url"
+            ],
+            "properties": {
+              "url": {
+                "type": "string",
+                "description": "URL страницы с OneScriptJS или блоком <script type=\"text/osjs\">."
+              },
+              "webRoot": {
+                "type": "string",
+                "description": "Корень рабочей области для сопоставления URL и файлов.",
+                "default": "${workspaceFolder}"
+              },
+              "port": {
+                "type": "number",
+                "description": "Порт WebSocket-сервера адаптера.",
+                "default": 9229
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Остановиться на первом исполняемом операторе.",
+                "default": false
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "osjs",
+            "request": "launch",
+            "name": "OneScriptJS: запуск файла",
+            "program": "${file}",
+            "cwd": "${workspaceFolder}"
+          },
+          {
+            "type": "osjs",
+            "request": "attach",
+            "name": "OneScriptJS: браузер",
+            "url": "http://localhost:5173/examples/hello.html",
+            "webRoot": "${workspaceFolder}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "OneScriptJS: запуск файла",
+            "description": "Запустить текущий .osjs под отладчиком OneScriptJS",
+            "body": {
+              "type": "osjs",
+              "request": "launch",
+              "name": "OneScriptJS: запуск файла",
+              "program": "${file}",
+              "cwd": "${workspaceFolder}",
+              "stopOnEntry": false
+            }
+          },
+          {
+            "label": "OneScriptJS: браузер",
+            "description": "Подключиться к странице с OneScriptJS (WebSocket)",
+            "body": {
+              "type": "osjs",
+              "request": "attach",
+              "name": "OneScriptJS: браузер",
+              "url": "http://localhost:5173/examples/hello.html",
+              "webRoot": "${workspaceFolder}"
+            }
+          }
+        ]
       }
     ],
     "configuration": {

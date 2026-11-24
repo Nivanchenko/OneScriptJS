@@ -11,25 +11,27 @@
 ## Состояние
 - Перенос по старому плану **T1–T49 закрыт**: язык, стандартная библиотека, браузерная
   интеграция (DOM, события, декларативные `data-os-*`), xUnit-раннер и прогон эталонных тестов.
-- `pnpm typecheck` ✓, `pnpm test` ✓ — **944 теста** (91 файл Vitest), passed 944, skipped 0.
-- Текущая ветка — `feature/020-runtime-error-info`.
+- `pnpm typecheck` ✓, `pnpm test` ✓ — **1047 тестов** (101 файл Vitest), passed 1047, skipped 0.
+- Текущая ветка — `feature/021-debugger`.
 - Прогон `reference/OneScript/tests/*.os`: **18/66** файлов проходят целиком; ошибка разбора
   осталась одна (`annotations.os`); `events.os` разбирается, но падает на
   `ПодключитьСценарий` (спека 004).
 - Старый `docs/plan.md` удалён: незавершённые работы вынесены в спецификации `specs/`;
-  спеки 001, 006, 008, 009, 010, 011, 012 и 013 реализованы, 002, 003, 005, 007 — пока только spec.
+  спеки 001, 006, 008–021 реализованы, 002, 003, 005, 007 — пока только spec.
 
 ## Архитектура (слои)
 `src/lexer` (токены) → `src/parser` (AST + препроцессор `#`) → `src/runtime`
 (`values`, `scope`+`Ref`, `context`, `async` (MaybePromise/`drive`/кванты), `interpreter`
 на генераторах с синхронным быстрым путём, `dynamic-names` (имена в `Выполнить`/`Вычислить`),
-`enum`, `object`, `type`, `error-snapshot` (снимок ошибки: позиция + BSL-стек), `error-info`, `runner`) → `src/stdlib` (global-context, collections,
+`enum`, `object`, `type`, `error-snapshot` (снимок ошибки: позиция + BSL-стек), `error-info`, `runner`,
+`debug/` (контроллер отладчика и визуализатор значений)) → `src/stdlib` (global-context, collections,
 strings, math, bitwise, json, types, enums, format, tasks/фоновые задания) →
 `src/browser/onescript.ts` (`script[type="text/osjs"]`) и `src/node/` (cli, context, files) →
 `src/testing` (xUnit-раннер).
 
 Сборка: `dist/onescript.js` (браузер, IIFE), `dist/node/index.{js,cjs,d.ts}` (библиотека),
-`dist/cli.mjs` (CLI).
+`dist/cli.mjs` (CLI), `dist/onescript-debug.js` (page-agent) и `dist/debug/adapter.cjs`
+(DAP-адаптер).
 
 ## Что реализовано
 - Язык: переменные, `если/иначеесли/иначе`, циклы (`Для`/`Пока`/`Для Каждого`,
@@ -120,6 +122,14 @@ strings, math, bitwise, json, types, enums, format, tasks/фоновые зад�
   `модуль:строка: описание` + стек в stderr (код 1), браузер — то же в `console.error`
   (`URL#blockN`/URL файла), включая декларативные обработчики. Тексты
   `ОписаниеОшибки()`/`Описание` не менялись; отладчик/DAP — вне объёма.
+- Отладчик BSL (спека 021): DAP-адаптер (`dist/debug/adapter.cjs`), тип отладчика `osjs`
+  в VS Code, Node `launch` (движок в процессе адаптера) и браузерный `attach`
+  (page-agent ↔ WebSocket на `127.0.0.1`). Брейкпоинты по строкам и в inline-блоках
+  `<script type="text/osjs">` (маппинг HTML-строка ↔ блок), шаги, BSL-стек, переменные
+  (локальные/модуль), `evaluate` (watch/hover), условные брейкпоинты и logpoints, фильтры
+  исключений `uncaught`/`all`, потоки фоновых заданий. Пауза — `yield` Promise-гейта;
+  выключенный отладчик не добавляет ни одного `yield`. Production `dist/onescript.js`
+  агента не содержит (отдельный `dist/onescript-debug.js`).
 
 ## Спецификации — работы в `specs/`
 
@@ -144,10 +154,11 @@ strings, math, bitwise, json, types, enums, format, tasks/фоновые зад�
 | `017-vscode-client` | Тонкий клиент VS Code: язык `osjs` + грамматика, запуск LSP-сервера, HTML-блоки по настройке, локальный `.vsix` | реализовано (сборка/тесты + ручная приёмка в GUI VS Code) |
 | `018-embedded-language-mode` | Embedded language mode в VS Code: TextMate-инъекция `<script type="text/osjs">` (подсветка/комментарии/скобки/фолдинг/word pattern) | реализовано (грамматика/тесты/сборка + ручная приёмка в GUI VS Code) |
 | `020-runtime-error-info` | Позиция (модуль/строка/исходная строка) и BSL-стек в ошибках исполнения: `ИнформацияОбОшибке`, CLI stderr, браузерный `console.error`; перевыброс/async/задания | реализовано |
+| `021-debugger` | Отладчик BSL (DAP): Node `launch`, браузерный `attach`, брейкпоинты (включая inline HTML), шаги, стек, переменные, evaluate, logpoints/исключения, потоки заданий; VS Code-клиент | реализовано (MVP + P2/P3; ручная приёмка VS Code — за владельцем) |
 | `019-osjs-src-attr` | Загрузка сценария по ссылке: `<script type="text/osjs" src="…">` грузит внешний `.osjs` через fetch; импорты/`ТекущийСценарий` — от URL файла | реализовано (runtime + тесты + пример `examples/external.html`) |
 
 Для незавершённых спек следующий шаг — `/speckit-plan` или `/speckit-tasks` в её каталоге;
-реализованы 001, 006, 008–019 (015 — полностью, слои A/B/C); незавершённые — 002, 003, 005,
+реализованы 001, 006, 008–021 (015 — полностью, слои A/B/C); незавершённые — 002, 003, 005,
 007 (только spec) и 004 (US1–US2 `ПодключитьСценарий`).
 
 **Редакторные инструменты для `.osjs`** реализованы по спеке
@@ -225,7 +236,25 @@ HTML-грамматике VS Code 1.146.0) и `pnpm build:vscode` (`.vsix` 11 ф
 грамматики внутри). **Ручная приёмка в GUI VS Code выполнена владельцем**: подсветка,
 `Ctrl+/`, фолдинг `#Область`, word pattern/Emmet и прочие UI-кейсы работают (T014 закрыт).
 
+**Отладчик BSL (DAP) — реализован** по спеке
+[`specs/021-debugger/spec.md`](../specs/021-debugger/spec.md) (MVP US1–US2 + P2/P3
+US3–US5): `src/runtime/debug/` (контроллер, хуки `exec`/`onException`, визуализатор),
+`src/debug/` (протокол страницы, HTML-маппинг), `src/node/debug/` (DAP-сессия с `launch` и
+`attach`, WS-сервер, URL-маппинг), `src/browser/debug/` + `dist/onescript-debug.js`
+(page-agent) и фабрика в `extensions/vscode/src/debug.ts`. Сборка:
+`pnpm build:debug-client`, `pnpm build:debug-adapter` (`dist/debug/adapter.cjs`),
+`pnpm build:vscode` (`.vsix` с `out/debug-adapter.js`). Приёмка без VS Code —
+`node tests/fixtures/debug/run-dap-smoke.mjs` (сценарий quickstart §1) и
+`tests/dap-*.test.ts`; ручная проверка launch/attach в GUI VS Code остаётся за владельцем
+(Playwright-e2e нет — спека 007 в Draft).
+
 ## Известные пробелы
+- Отладчик (спека 021), ограничения MVP: движок исполняется **в процессе адаптера**, поэтому
+  `process.exit` в скрипте убивает адаптер (изоляция в дочернем процессе — позже);
+  `spawnSync` в HTTP-транспорте блокирует event loop адаптера на время запроса; браузерный
+  attach рассчитан на http dev-сервер (HTTPS-страница + `ws://127.0.0.1` — mixed content);
+  одна сессия на вкладку (вторая получает close 1013); нет Playwright-e2e — браузерная
+  приёмка ручная; DAP-подмножество без `setVariable`, restart, step-back и `terminate`.
 - Ошибки исполнения (спека 020) — осознанные расхождения с C#-эталоном:
   `ОписаниеОшибки()`/`ИнформацияОбОшибке().Описание` остаются только текстом ошибки (в 1С
   туда входит модуль/строка) — сохранение точных текстов важнее совместимости;

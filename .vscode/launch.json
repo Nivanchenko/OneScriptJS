@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "osjs",
+      "request": "launch",
+      "name": "OneScriptJS: запуск файла",
+      "program": "${file}",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "osjs",
+      "request": "attach",
+      "name": "OneScriptJS: браузер",
+      "url": "http://localhost:5173/examples/hello.html",
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "type": "osjs",
+      "request": "attach",
+      "name": "OneScriptJS: браузер todo app",
+      "url": "http://localhost:5173/examples/todo.html",
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "type": "osjs",
+      "request": "attach",
+      "name": "OneScriptJS: браузер modules app",
+      "url": "http://localhost:5173/examples/modules.html",
+      "webRoot": "${workspaceFolder}"
+    }
+  ]
+}

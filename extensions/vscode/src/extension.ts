@@ -7,6 +7,7 @@ import {
   type LanguageClientOptions,
   type ServerOptions,
 } from 'vscode-languageclient/node';
+import { registerDebug } from './debug';
 
 const CONFIG_SECTION = 'onescriptjs';
 const OUTPUT_CHANNEL = 'OneScriptJS';
@@ -141,6 +142,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const channel = vscode.window.createOutputChannel(OUTPUT_CHANNEL, { log: true });
   outputChannel = channel;
   context.subscriptions.push(channel);
+
+  // Отладчик типа `osjs`: DAP-адаптер — отдельный процесс из out/debug-adapter.js.
+  context.subscriptions.push(registerDebug(context));
 
   context.subscriptions.push(
     vscode.commands.registerCommand('onescriptjs.restartServer', async () => {

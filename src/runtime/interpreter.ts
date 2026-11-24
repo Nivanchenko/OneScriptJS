@@ -46,7 +46,8 @@ import { BslPromise } from './promise';
 import type { BslGenerator, DriveOptions, MaybePromise, SliceController } from './async';
 import { TimeSlicer, drive, isThenable, yieldMaybe, yieldToHost } from './async';
 
-interface Ctx {
+/** Контекст исполнения модуля: методы, области и текущее исключение. */
+export interface Ctx {
   methods: Map<string, MethodDeclaration>;
   /** Область, в которой объявлен метод; нужна динамическим методам из `Выполнить`. */
   methodScopes: Map<string, Scope>;
@@ -67,12 +68,20 @@ interface MethodSource {
 }
 
 /** Кадр активного BSL-стека (изнутри наружу — при снятии снимка переворачивается). */
-interface ActiveFrame {
+export interface ActiveFrame {
   method: string;
   module: string;
   line: number;
   /** Строки исходника этого кадра — для `ИсходнаяСтрока` верхнего кадра. */
   lines: readonly string[];
+  /** Область видимости кадра (локальные переменные) — для отладчика. */
+  scope: Scope;
+  /** Контекст модуля кадра (модульные переменные/методы) — для отладчика. */
+  ctx: Ctx;
+  /** Интерпретатор, исполняющий кадр (для `evaluate`/`ЭтотОбъект`). */
+  interp: Interpreter;
+  /** Счётчик вложенности `Попытка` для фильтра `uncaught`; общий у копий кадра. */
+  guard: { tryDepth: number };
 }
 
 /** Описание источника для `Interpreter` (модуль/фрагмент). */
@@ -151,6 +160,8 @@ export class Interpreter {
   ) {
     if (source?.id !== undefined) this.sourceId = source.id;
     if (source?.text !== undefined) this.sourceText = source.text;
+    // Включённый отладчик требует уступок хосту: иначе `pause` не дойдёт до цикла.
+    if (env.debug !== undefined) this.slicer = new TimeSlicer();
   }
 
   /** Строки исходника модуля (лениво). */
@@ -168,8 +179,31 @@ export class Interpreter {
     return result;
   }
 
-  private pushFrame(method: string, module: string, lines: readonly string[]): void {
-    this.frames.push({ method, module, line: 0, lines });
+  /** Активный BSL-стек текущего invocation-а изнутри наружу (для отладчика). */
+  get activeFrames(): readonly ActiveFrame[] {
+    return this.frames;
+  }
+
+  private pushFrame(
+    method: string,
+    module: string,
+    lines: readonly string[],
+    scope: Scope,
+    ctx: Ctx,
+  ): void {
+    // Глубина `Попытка` принадлежит invocation-у, а не кадру: новый guard — только
+    // у корневого кадра, вложенные делят его с вызывающим (фильтр `uncaught`).
+    const guard = this.frames[this.frames.length - 1]?.guard ?? { tryDepth: 0 };
+    this.frames.push({
+      method,
+      module,
+      line: 0,
+      lines,
+      scope,
+      ctx,
+      interp: this,
+      guard,
+    });
   }
 
   private popFrame(): void {
@@ -177,9 +211,15 @@ export class Interpreter {
   }
 
   /** Кадр метода: для динамически объявленных — источник фрагмента, иначе — модуля. */
-  private pushMethodFrame(method: MethodDeclaration): void {
+  private pushMethodFrame(method: MethodDeclaration, scope: Scope, ctx: Ctx): void {
     const source = this.moduleCtx?.methodSources.get(key(method.name));
-    this.pushFrame(method.name, source?.module ?? this.sourceId, source?.lines ?? this.lines);
+    this.pushFrame(
+      method.name,
+      source?.module ?? this.sourceId,
+      source?.lines ?? this.lines,
+      scope,
+      ctx,
+    );
   }
 
   /**
@@ -203,6 +243,9 @@ export class Interpreter {
     frames: ActiveFrame[],
     options: DriveOptions = {},
   ): MaybePromise<T> {
+    // Хост мог выставить `env.debug` уже после конструктора; в отладочном режиме
+    // нужны уступки хосту, иначе `pause` не обработается в плотном цикле.
+    if (this.env.debug !== undefined) this.slicer ??= new TimeSlicer();
     const saved = this.frames;
     this.frames = frames;
     try {
@@ -339,7 +382,7 @@ export class Interpreter {
   }
 
   private *runGen(executable: Statement[], scope: Scope, ctx: Ctx): BslGenerator<void> {
-    this.pushFrame(MODULE_FRAME, this.sourceId, this.lines);
+    this.pushFrame(MODULE_FRAME, this.sourceId, this.lines, scope, ctx);
     try {
       yield* this.execGotoBlock(executable, scope, ctx);
     } finally {
@@ -384,7 +427,7 @@ export class Interpreter {
         localScope.set(p.name, undefined);
       }
     }
-    this.pushMethodFrame(method);
+    this.pushMethodFrame(method, localScope, ctx);
     try {
       try {
         yield* this.execGotoBlock(method.body, localScope, ctx);
@@ -485,7 +528,7 @@ export class Interpreter {
       // Параметры async-методов передаются только по значению (как в 1C).
       localScope.set(p.name, value);
     }
-    this.pushMethodFrame(method);
+    this.pushMethodFrame(method, localScope, ctx);
     try {
       try {
         yield* this.execGotoBlock(method.body, localScope, ctx);
@@ -565,7 +608,7 @@ export class Interpreter {
     method.params.forEach((p, i) => {
       localScope.bindRef(p.name, new Ref(() => boxes[i], (v) => { boxes[i] = v; }));
     });
-    this.pushMethodFrame(method);
+    this.pushMethodFrame(method, localScope, ctx);
     try {
       try {
         yield* this.execGotoBlock(method.body, localScope, ctx);
@@ -615,10 +658,23 @@ export class Interpreter {
     // Позиция текущего кадра — строка оператора; снимок снимается при ошибке.
     const frame = this.frames[this.frames.length - 1];
     if (frame) frame.line = stmt.pos.line;
+    // Единственная воронка операторов: хук отладчика. Без `env.debug` — ни одного
+    // нового `yield`, синхронный быстрый путь не меняется.
+    const debug = this.env.debug;
+    if (debug !== undefined && frame !== undefined) {
+      const gate = debug.onStatement(this, frame, stmt.pos.line);
+      if (gate !== undefined) yield gate;
+    }
     try {
       yield* this.execStatement(stmt, scope, ctx);
     } catch (e) {
       this.annotateAtCurrent(e);
+      // Единственная точка, где ошибка ещё видна до обработки `Попытка`: контроллер
+      // решает по фильтру и глубине tryDepth, останавливаться ли.
+      if (debug !== undefined && frame !== undefined) {
+        const gate = debug.onException(this, frame, e);
+        if (gate !== undefined) yield gate;
+      }
       throw e;
     }
   }
@@ -799,9 +855,16 @@ export class Interpreter {
   }
 
   private *execTryExcept(stmt: TryExceptStatement, scope: Scope, ctx: Ctx): BslGenerator<void> {
+    // Глубина `Попытка` нужна фильтру `uncaught`: ошибка внутри неё не «необработана».
+    const frame = this.frames[this.frames.length - 1];
+    if (frame) frame.guard.tryDepth++;
+    let caught = false;
     try {
       yield* this.execBlock(stmt.tryBody, scope, ctx);
     } catch (e) {
+      caught = true;
+      // В блоке `Исключение` та же `Попытка` уже не ловит: ошибка пойдёт наружу.
+      if (frame) frame.guard.tryDepth--;
       // BSL: Попытка/Исключение ловит любые ошибки рантайма, в т.ч. ошибки stdlib
       // (обычный Error), а не только ВызватьИсключение. Сигналы управления
       // (Return/Break/Continue/Goto) — не Error, пропускаются.
@@ -818,6 +881,8 @@ export class Interpreter {
       } else {
         throw e;
       }
+    } finally {
+      if (frame && !caught) frame.guard.tryDepth--;
     }
   }
 
@@ -1026,7 +1091,7 @@ export class Interpreter {
         localScope.bindRef(p.name, yield* this.resolveRef(argExpr, scope, ctx));
       }
     }
-    this.pushMethodFrame(method);
+    this.pushMethodFrame(method, localScope, ctx);
     try {
       try {
         yield* this.execGotoBlock(method.body, localScope, ctx);
@@ -1098,7 +1163,7 @@ export class Interpreter {
       throw new BslRuntimeError(e instanceof Error ? e.message : String(e));
     }
     // Кадр динамического фрагмента: своя строка исходника и маркер `<Вычислить>`.
-    this.pushFrame(EVAL_FRAME, EVAL_FRAME, splitSourceLines(stripBom(code)));
+    this.pushFrame(EVAL_FRAME, EVAL_FRAME, splitSourceLines(stripBom(code)), scope, ctx);
     const frame = this.frames[this.frames.length - 1];
     if (frame) frame.line = expr.pos.line;
     try {
@@ -1109,6 +1174,29 @@ export class Interpreter {
     } finally {
       this.popFrame();
     }
+  }
+
+  /**
+   * Вычисляет BSL-выражение в области снимка кадра, не возобновляя исполнение.
+   * Свежий пустой стек invocation-а: в паузе `this.frames` уже восстановлен снаружи.
+   */
+  evaluateInFrame(scope: Scope, ctx: Ctx, source: string): MaybePromise<Value> {
+    return this.driveInvocation(this.evaluateInFrameGen(scope, ctx, source), []);
+  }
+
+  private *evaluateInFrameGen(scope: Scope, ctx: Ctx, source: string): BslGenerator<Value> {
+    const program = Interpreter.compileDynamic(`сообщить(${source});`);
+    const stmt = program.body[0] as ExpressionStatement | undefined;
+    const call = stmt?.expression as CallExpression | undefined;
+    const expr = call?.args[0];
+    if (expr === undefined) throw new BslRuntimeError('Пустое выражение');
+    // Та же проверка имён, что у `Вычислить`: неизвестное имя — ошибка, а не Неопределено.
+    try {
+      checkDynamicExpression(expr, { scope, methods: ctx.methods, env: this.env });
+    } catch (e) {
+      throw new BslRuntimeError(e instanceof Error ? e.message : String(e));
+    }
+    return yield* this.eval(expr, scope, ctx);
   }
 
   /** `Выполнить строка` — исполняет операторы в области текущего контекста. */
@@ -1158,6 +1246,8 @@ export class Interpreter {
       frame?.method ?? EXECUTE_FRAME,
       frame?.module ?? EXECUTE_FRAME,
       dynamicLines,
+      dynamicScope,
+      ctx,
     );
     try {
       yield* this.execGotoBlock(executable, dynamicScope, ctx);

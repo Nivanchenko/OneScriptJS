@@ -162,7 +162,39 @@ OneScript — открытая реализация языка, совмести
   `preprocessScript(tokens, { errors })`) аддитивны: поведение `parse()`/`tokenize()` и
   семантика исполнения не меняются, браузерный бандл не затрагивается.
 
+### 12. Отладчик BSL (DAP) → `src/runtime/debug`, `src/debug`, `src/node/debug`, `src/browser/debug`
+
+DAP-отладчик поверх генераторного интерпретатора (спека
+[`021-debugger`](../specs/021-debugger/spec.md)): пауза — это `yield` Promise-гейта, а не
+блокировка потока, поэтому стек сохраняется нативно, а страница не замирает.
+
+- `src/runtime/debug/controller.ts` — `DebugController`: брейкпоинты, режимы
+  `run/pauseRequested/step*`, реестр потоков (главный + фоновые задания), снимок кадров,
+  sink событий, фильтры исключений (`uncaught`/`all`, `guard.tryDepth`). Хук — в `exec`
+  интерпретатора (`env.debug.onStatement` → `if (gate) yield gate`); без `env.debug`
+  дополнительных `yield` нет. `src/runtime/debug/values.ts` — визуализатор BSL-значений и
+  ленивые `variablesReference`.
+- `src/debug/` — общий browser-safe слой: `page-protocol.ts` (сообщения страница↔адаптер),
+  `html-mapping.ts` (строка HTML ↔ строка inline-блока через `findBlocks`).
+- `src/node/debug/` — DAP-адаптер (`session.ts`: `OsjsDebugSession`, в нём же `launch` и
+  `attach`), `launch.ts` (движок в процессе адаптера, `console.*` → DAP `output`),
+  `ws-server.ts` (WebSocket на `127.0.0.1`, Origin/token, одна сессия), `url-map.ts`
+  (URL ↔ файл, `webRoot`). Entry — `src/node/debug-adapter.ts` (`DebugSession.run`).
+- `src/browser/debug/agent.ts` + entry `src/browser/onescript-debug.ts` — page-agent:
+  WS-клиент, контроллер на странице, манифест источников, гейт до `configurationDone`.
+  `src/browser/onescript.ts` подключает его только при наличии
+  `globalThis.__OSJS_DEBUG__`, поэтому production `dist/onescript.js` агента не содержит.
+- `extensions/vscode/src/debug.ts` — `DebugAdapterDescriptorFactory` типа `osjs`:
+  запускает `out/debug-adapter.js` на Node-рантайме VS Code.
+
+Ограничения: движок исполняется **в процессе адаптера** (отдельного процесса нет, поэтому
+`process.exit` скрипта обрывает сессию), а `spawnSync` HTTP-транспорта блокирует event loop
+адаптера; браузерный attach рассчитан на http dev-сервер (HTTPS → `ws://` — mixed content) и
+одну вкладку. Сборка: `pnpm build:debug-client` (`vite.debug.config.ts`),
+`pnpm build:debug-adapter` (`scripts/build-debug-adapter.mjs` → `dist/debug/adapter.cjs`),
+`pnpm build:vscode` (entry `out/debug-adapter.js` в `.vsix`).
+
 ## Статус переноса
 
 Язык и стандартная библиотека переносятся по спецификациям `specs/`; реализованы
-`001`, `008`–`014` (см. сводку в `docs/status.md`).
+`001`, `006`, `008`–`021` (см. сводку в `docs/status.md`).

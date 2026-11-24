@@ -28,12 +28,14 @@
     "typecheck": "tsc --noEmit",
     "typecheck:vscode": "tsc -p extensions/vscode/tsconfig.json --noEmit",
     "build:browser": "vite build",
+    "build:debug-client": "vite build --config vite.debug.config.ts",
     "build:node": "vite build --config vite.node.config.ts && tsc -p tsconfig.build.json",
     "build:cli": "vite build --config vite.cli.config.ts",
     "build:lsp": "vite build --config vite.lsp.config.ts",
     "build:vscode": "node scripts/build-vscode-extension.mjs",
+    "build:debug-adapter": "node scripts/build-debug-adapter.mjs",
     "build:catalog": "node scripts/build-api-catalog.mjs",
-    "build": "tsc --noEmit && vite build && vite build --config vite.node.config.ts && vite build --config vite.cli.config.ts && tsc -p tsconfig.build.json && vite build --config vite.lsp.config.ts",
+    "build": "tsc --noEmit && vite build && vite build --config vite.debug.config.ts && vite build --config vite.node.config.ts && vite build --config vite.cli.config.ts && tsc -p tsconfig.build.json && vite build --config vite.lsp.config.ts",
     "oscript": "node dist/cli.mjs",
     "lsp": "node dist/lsp/server.mjs",
     "test": "vitest run",
@@ -44,6 +46,9 @@
   "devDependencies": {
     "@types/node": "^24.19.2",
     "@types/vscode": "1.91.0",
+    "@types/ws": "^8.18.2",
+    "@vscode/debugadapter": "1.68.0",
+    "@vscode/debugprotocol": "1.68.0",
     "@vscode/vsce": "4.1.0",
     "esbuild": "0.28.2",
     "happy-dom": "^21.0.4",
@@ -55,6 +60,7 @@
     "vscode-languageserver": "11.0.0",
     "vscode-languageserver-textdocument": "1.0.16",
     "vscode-oniguruma": "^2.0.1",
-    "vscode-textmate": "^9.3.2"
+    "vscode-textmate": "^9.3.2",
+    "ws": "8.23.0"
   }
 }

@@ -3,6 +3,7 @@ import type { MaybePromise } from './async';
 import type { AsyncTracker } from './promise';
 import type { BslObject } from './object';
 import type { Interpreter } from './interpreter';
+import type { DebugController } from './debug/controller';
 import { EventProcessor } from './events';
 import { formatErrorReport } from './error-snapshot';
 import type { ImportDirective } from '../parser/preprocessor';
@@ -31,6 +32,8 @@ export interface RuntimeEnvironment {
   trackAsync?(tracker: AsyncTracker): void;
   /** Необработанная ошибка `Обещания` (по умолчанию — `console.error`). */
   reportUnhandledError?(error: unknown): void;
+  /** Контроллер отладки; отсутствует — движок работает как раньше. */
+  debug?: DebugController;
 }
 
 /** Реестр, достаточный загрузчику модулей: глобальные имена и типы. */
@@ -70,6 +73,8 @@ export class GlobalContext implements RuntimeEnvironment {
   flushAsync?: () => MaybePromise<void>;
   /** Незавершённые `Обещания` текущего запуска. */
   readonly pendingPromises = new Set<AsyncTracker>();
+  /** Контроллер отладки; хост выставляет до `run()`, форки заданий видят его же. */
+  debug?: DebugController;
 
   register(name: string, fn: GlobalFunction): void {
     this.functions.set(name.toLowerCase(), fn);

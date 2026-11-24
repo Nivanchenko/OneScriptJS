@@ -1,15 +1,16 @@
 # OneScriptJS для VS Code
 
 Тонкий клиент VS Code для OneScriptJS (`.osjs`): регистрирует язык и грамматику,
-запускает встроенный LSP-сервер и по настройке обслуживает блоки
-`<script type="text/osjs">` в HTML. Собственных провайдеров, форматирования и отладки
-в расширении нет — всё делает сервер.
+запускает встроенный LSP-сервер, по настройке обслуживает блоки
+`<script type="text/osjs">` в HTML и подключает DAP-отладчик типа `osjs`. Собственных
+провайдеров языка и форматирования нет — всё делает сервер; отладчик — тонкая фабрика
+поверх `out/debug-adapter.js`.
 
 ## Установка из `.vsix`
 
 ```bash
 pnpm build:vscode
-code --install-extension dist/vscode/onescriptjs-0.1.0.vsix --force
+code --install-extension dist/vscode/onescriptjs-*.vsix --force
 # затем Reload Window
 ```
 
@@ -25,6 +26,52 @@ Marketplace не используется: пакет самодостаточе
   (полная BSL-подсветка, `Ctrl+/` → `//`, фолдинг `#Область`/`#Если`, скобки/кавычки,
   кириллический word pattern) и LSP-функции (диагностика/подсказки/hover/`gd`).
   Вне блоков расширение молчит, язык документа остаётся `html`.
+
+## Отладчик (DAP)
+
+В расширение входит DAP-адаптер (`out/debug-adapter.js`) и тип отладчика `osjs`.
+Отладка работает, если пакет собран командой `pnpm build:vscode` (адаптер кладётся в
+`.vsix`); отдельный Node.js не нужен — адаптер запускается на Node-рантайме VS Code.
+
+**Node launch.** `.vscode/launch.json` проверяемого проекта:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    { "type": "osjs", "request": "launch", "name": "OneScriptJS: launch",
+      "program": "${file}", "cwd": "${workspaceFolder}", "stopOnEntry": false }
+  ]
+}
+```
+
+F5 на открытом `.osjs`: брейкпоинты по строкам, `F10`/`F11`/`Shift+F11`, BSL-стек
+(`Метод (файл:строка)`), локальные и модульные переменные, Debug Console для
+`Сообщить()`/`console.log`, watch/hover через `evaluate`.
+
+**Браузер attach.** Сначала соберите страницу и клиент, затем поднимите dev-сервер:
+
+```bash
+pnpm build:browser && pnpm build:debug-client
+OSJS_DEBUG=1 pnpm dev        # http://localhost:5173/examples/hello.html
+```
+
+```json
+{ "type": "osjs", "request": "attach", "name": "OneScriptJS: browser",
+  "url": "http://localhost:5173/examples/hello.html",
+  "webRoot": "${workspaceFolder}" }
+```
+
+Запустите `attach`, затем откройте/перезагрузите страницу: page-agent подключается к
+адаптеру (порт `9229`, `OSJS_DEBUG_PORT` переопределяет) и ждёт `configurationDone`,
+поэтому блоки не исполняются до готовности сессии. Брейкпоинты работают во внешних
+`.osjs` и в inline-блоках `<script type="text/osjs">` (остановка на строке HTML).
+Подробности и приёмка — [`specs/021-debugger/quickstart.md`](../../specs/021-debugger/quickstart.md).
+
+Ограничения отладчика: движок исполняется в процессе адаптера (`process.exit` в скрипте
+обрывает сессию); `spawnSync` HTTP-транспорта блокирует event loop; HTTPS-страница с
+`ws://127.0.0.1` — mixed content; одна сессия на вкладку; Playwright-e2e нет; нет
+`setVariable`, restart и step-back.
 
 ## Настройки
 

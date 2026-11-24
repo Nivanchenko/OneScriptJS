@@ -36,6 +36,8 @@
   `ЭтотОбъект`); `<script type="text/osjs">`, `Документ`, `data-os-*`, `Событие`.
 - **Node.js и тесты** — CLI `pnpm oscript`, библиотека (`run`, `runScript`), файловые
   функции; xUnit-раннер `runTests`.
+- **Отладка** — DAP-адаптер для VS Code: Node `launch` и браузерный `attach`,
+  брейкпоинты (включая inline-блоки HTML), шаги, стек, переменные, evaluate.
 
 ## Быстрый старт
 
@@ -421,7 +423,7 @@ vim.lsp.start({
 
 ```bash
 pnpm build:vscode
-code --install-extension dist/vscode/onescriptjs-0.1.0.vsix --force
+code --install-extension dist/vscode/onescriptjs-*.vsix --force
 # Reload Window в VS Code
 ```
 
@@ -438,6 +440,86 @@ Outline и переходы. HTML со `<script type="text/osjs">` обслуж�
 Пример для ручной проверки — [`examples/editor.osjs`](examples/editor.osjs),
 фикстуры — `tests/fixtures/lsp/`. Тонкий клиент VS Code (установка из `.vsix`) —
 отдельная следующая работа; грамматика и сервер от него не зависят.
+
+## Отладчик (DAP)
+
+Отладчик BSL по протоколу DAP: Node `launch` (скрипт исполняется в процессе адаптера) и
+браузерный `attach` (page-agent на странице ↔ адаптер по WebSocket). Пауза — `yield`
+Promise-гейта в генераторном интерпретаторе: стек сохраняется нативно, а страница на
+паузе не замирает. Спека — [`specs/021-debugger/spec.md`](specs/021-debugger/spec.md),
+пошаговая проверка — [`quickstart.md`](specs/021-debugger/quickstart.md).
+
+### Сборка
+
+```bash
+pnpm build                  # движок + dist/onescript-debug.js (page agent)
+pnpm build:debug-adapter    # dist/debug/adapter.cjs — DAP-адаптер (stdio)
+pnpm build:vscode           # .vsix с out/debug-adapter.js внутри (Node >= 22)
+code --install-extension dist/vscode/onescriptjs-*.vsix --force
+```
+
+`pnpm build` включает `build:debug-client`; адаптер для ручного запуска собирается
+отдельно (`build:debug-adapter`). Production `dist/onescript.js` отладочного клиента не
+содержит — page-agent подключается только dev-инъекцией или отдельным тегом.
+
+### Node launch
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "osjs",
+      "request": "launch",
+      "name": "OneScriptJS: launch",
+      "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "stopOnEntry": false
+    }
+  ]
+}
+```
+
+F5 на открытом `.osjs`: брейкпоинты по строкам, шаги (`F10`/`F11`/`Shift+F11`),
+«Стек вызовов» с BSL-кадрами (`Метод (файл:строка)`), «Переменные» (локальные и модуль),
+Debug Console (`Сообщить()`/`console.log`), watch/hover через `evaluate`.
+
+### Браузер attach
+
+```bash
+pnpm build:browser && pnpm build:debug-client
+OSJS_DEBUG=1 pnpm dev        # http://localhost:5173/examples/hello.html
+```
+
+При `OSJS_DEBUG=1` dev-плагин вставляет `onescript-debug.js` до движка и передаёт порт
+адаптера (по умолчанию `9229`, переопределяется `OSJS_DEBUG_PORT`). `launch.json`:
+
+```json
+{
+  "type": "osjs", "request": "attach", "name": "OneScriptJS: browser",
+  "url": "http://localhost:5173/examples/hello.html",
+  "webRoot": "${workspaceFolder}"
+}
+```
+
+Порядок: запустить `attach`, затем открыть/перезагрузить страницу — page-agent
+подключается к адаптеру и ждёт `configurationDone`, поэтому блоки не исполняются до
+готовности сессии. Брейкпоинты работают во внешних `.osjs` и в inline-блоках
+`<script type="text/osjs">` (остановка на строке HTML). Без dev-сервера подключите
+`<script src="onescript-debug.js"></script>` перед `onescript.js`.
+
+### Ограничения MVP
+
+- **`process.exit` убивает адаптер**: движок исполняется в процессе адаптера, отдельного
+  процесса нет; завершение скрипта через `process.exit` обрывает сессию.
+- **`spawnSync` в HTTP-транспорте** блокирует event loop адаптера на время запроса —
+  `pause`/шаги в этот момент не обрабатываются.
+- **HTTPS-страница + `ws://127.0.0.1`** — mixed content: браузер блокирует соединение;
+  отладка рассчитана на http dev-сервер.
+- **Одна сессия на вкладку**: вторая вкладка получает отказ (close 1013).
+- **Нет Playwright-e2e**: браузерная приёмка ручная (спека 007 — Draft).
+- Нет `setVariable`, restart, step-back и `terminate`; DAP-подмножество — в
+  [`contracts/dap-adapter.md`](specs/021-debugger/contracts/dap-adapter.md).
 
 ## Практические рецепты
 
@@ -582,7 +664,10 @@ pnpm test:watch      # тесты в watch-режиме
 pnpm build:browser   # dist/onescript.js
 pnpm build:node      # dist/node/ (Node-библиотека)
 pnpm build:cli       # dist/cli.mjs
-pnpm build           # полная сборка
+pnpm build:debug-client   # dist/onescript-debug.js (page agent)
+pnpm build:debug-adapter  # dist/debug/adapter.cjs (DAP-адаптер, stdio)
+pnpm build:vscode    # dist/vscode/onescriptjs-*.vsix
+pnpm build           # полная сборка (включая debug-client)
 pnpm dev             # dev-сервер примеров, http://localhost:5173
 pnpm demo            # сборка + примеры в dist/ + preview, http://localhost:4173
 ```
@@ -624,7 +709,8 @@ git push origin v0.1.0
 это `0.1.0`):
 
 - `onescriptjs-<версия>.tar.gz` — содержимое `dist/`: браузерный бандл, Node-библиотека
-  с `.d.ts`, CLI `cli.mjs`, LSP-сервер;
+  с `.d.ts`, CLI `cli.mjs`, LSP-сервер, отладочный клиент `onescript-debug.js` и
+  DAP-адаптер `debug/`;
 - `onescriptjs-<версия>.js` — браузерный бандл отдельным файлом (`<script src="onescript.js">`);
 - `onescriptjs-<версия>.vsix` — расширение VS Code;
 - `SHA256SUMS` — контрольные суммы.

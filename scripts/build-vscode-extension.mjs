@@ -3,7 +3,8 @@
  * Собирает самодостаточный `.vsix` тонкого клиента VS Code (спека 017):
  *
  *   1. `pnpm build:lsp` — актуальный `dist/lsp/server.mjs`;
- *   2. esbuild — `extensions/vscode/src/extension.ts` → `out/extension.js` (CJS, `vscode` external);
+ *   2. esbuild — `extensions/vscode/src/extension.ts` → `out/extension.js` и
+ *      `src/node/debug-adapter.ts` → `out/debug-adapter.js` (CJS, движок внутри);
  *   3. staging `dist/vscode/extension/` — манифест, README, NOTICE, сервер, грамматика,
  *      language-configuration (единые источники из `editors/osjs/`);
  *   4. `@vscode/vsce package --no-dependencies` → `dist/vscode/<name>-<version>.vsix`.
@@ -85,6 +86,19 @@ await build({
   format: 'cjs',
   target: 'node20',
   external: ['vscode'],
+  sourcemap: false,
+  logLevel: 'info',
+});
+
+// DAP-адаптер: движок бандлится из src/, поэтому dist/node копировать не нужно.
+await build({
+  entryPoints: [join(ROOT, 'src/node/debug-adapter.ts')],
+  outfile: join(STAGING, 'out/debug-adapter.js'),
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  target: 'node20',
+  external: ['vscode', 'bufferutil', 'utf-8-validate'],
   sourcemap: false,
   logLevel: 'info',
 });
