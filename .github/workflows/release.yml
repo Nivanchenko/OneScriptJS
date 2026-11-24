@@ -32,6 +32,10 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Отладочный адаптер в релизном архиве: `pnpm build` его не собирает.
+      - name: Build debug adapter
+        run: pnpm build:debug-adapter
+
       # Сборка .vsix требует Node >= 22 — поэтому node-version выше 22.
       - name: Build VS Code extension
         run: pnpm build:vscode
@@ -45,7 +49,7 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           mkdir -p "$RUNNER_TEMP/release"
           tar -czf "$RUNNER_TEMP/release/onescriptjs-$version.tar.gz" \
-            -C dist onescript.js onescript.js.map node cli.mjs lsp
+            -C dist onescript.js onescript.js.map onescript-debug.js debug node cli.mjs lsp
           cp dist/onescript.js "$RUNNER_TEMP/release/onescriptjs-$version.js"
           cp dist/vscode/*.vsix "$RUNNER_TEMP/release/"
           cd "$RUNNER_TEMP/release"

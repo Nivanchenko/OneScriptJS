@@ -49,7 +49,9 @@
 | Проверка типов | `pnpm typecheck` |
 | Собрать браузерный бандл (`dist/onescript.js`) | `pnpm build:browser` |
 | Собрать Node-библиотеку (`dist/node/`) | `pnpm build:node` |
-| Полная сборка (типы + браузер + Node + LSP) | `pnpm build` |
+| Собрать page-agent отладчика (`dist/onescript-debug.js`) | `pnpm build:debug-client` |
+| Собрать DAP-адаптер (`dist/debug/adapter.cjs`) | `pnpm build:debug-adapter` |
+| Полная сборка (типы + браузер + debug-client + Node + LSP) | `pnpm build` |
 | Собрать LSP-сервер (`dist/lsp/server.mjs`) | `pnpm build:lsp` |
 | Перегенерировать каталог API для инструментов | `pnpm build:catalog` |
 | Собрать VS Code-расширение (`.vsix`, Node >= 22) | `pnpm build:vscode` |
@@ -69,22 +71,30 @@ OneScriptJS/
 ├── task.md                 ← исходное ТЗ
 ├── package.json
 ├── tsconfig.json / tsconfig.build.json
-├── vite.config.ts          ← браузерная сборка (onescript.js)
+├── vite.config.ts          ← браузерная сборка (onescript.js) + dev-инъекция отладчика
 ├── vite.node.config.ts     ← Node-сборка (ESM + CJS)
 ├── vite.lsp.config.ts      ← сборка LSP-сервера (dist/lsp/server.mjs)
+├── vite.debug.config.ts    ← сборка page-agent (dist/onescript-debug.js)
 ├── vitest.config.ts
 ├── src/
 │   ├── index.ts            ← точка входа библиотеки (Node / бандлеры)
+│   ├── runtime/debug/      ← контроллер отладчика, визуализатор значений
+│   ├── debug/              ← общий слой: протокол страницы, HTML-маппинг
 │   ├── browser/
-│   │   └── onescript.ts  ← браузерная точка входа (<script type="text/osjs">)
+│   │   ├── onescript.ts    ← браузерная точка входа (<script type="text/osjs">)
+│   │   ├── debug/agent.ts  ← page-agent отладчика (WS-клиент, контроллер)
+│   │   └── onescript-debug.ts ← IIFE-точка входа dist/onescript-debug.js
 │   ├── node/
-│   │   └── lsp-server.ts ← stdio-точка входа LSP-сервера
+│   │   ├── lsp-server.ts   ← stdio-точка входа LSP-сервера
+│   │   ├── debug-adapter.ts ← ENTRY DAP-адаптера (DebugSession.run)
+│   │   └── debug/          ← DAP-сессия (launch/attach), WS-сервер, URL-маппинг
 │   └── lsp/                ← инструменты .osjs: анализ, диагностика, подсказки
 ├── editors/osjs/           ← TextMate-грамматика, конфигурация языка, метаданные
-├── extensions/vscode/      ← тонкий клиент VS Code (грамматика + LSP-клиент, .vsix)
+├── extensions/vscode/      ← тонкий клиент VS Code (грамматика + LSP + DAP-фабрика, .vsix)
+│   └── src/debug.ts        ← фабрика DAP-адаптера (тип отладчика osjs)
 ├── .github/workflows/      ← GitHub Actions: pages.yml (демо на Pages), release.yml (артефакты по тегу v*)
-├── scripts/                ← check-api-docs.mjs, build-api-catalog.mjs, build-vscode-extension.mjs, …
-├── tests/                  ← юнит-тесты Vitest
+├── scripts/                ← check-api-docs.mjs, build-api-catalog.mjs, build-vscode-extension.mjs, build-debug-adapter.mjs, …
+├── tests/                  ← юнит-тесты Vitest; tests/fixtures/debug/ — фикстуры и DAP-smoke
 ├── examples/               ← HTML-примеры (hello.html — приёмочный сценарий)
 ├── docs/
 │   ├── architecture.md     ← карта «C# → TypeScript» и план слоёв
@@ -218,8 +228,12 @@ OneScriptJS/
   параметрами/возвратом, объекты с полями и методами, перечисления.
 - [`task.md`](task.md) — исходное ТЗ и приёмочный HTML-пример.
 - [`docs/architecture.md`](docs/architecture.md) — карта слоёв и статус переноса.
-- [`specs/`](specs/) — спецификации работ (001–019); план и задачи
+- [`specs/`](specs/) — спецификации работ (001–021); план и задачи
   создаются в каталоге конкретной спеки по мере готовности.
+- [`specs/021-debugger/`](specs/021-debugger/spec.md) — отладчик BSL (DAP):
+  `launch`/`attach`, брейкпоинты, шаги, переменные, evaluate; проверка —
+  [`quickstart.md`](specs/021-debugger/quickstart.md) и
+  `tests/fixtures/debug/run-dap-smoke.mjs`.
 - [`docs/bsl-surface.md`](docs/bsl-surface.md) — синтаксис и stdlib BSL (по `reference/tests`).
 - `reference/OneScript/AGENTS.md` — инструкции к оригиналу (для справки).
 - `reference/OneScript/docs/developer_docs.md` — архитектура C#-движка.

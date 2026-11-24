@@ -4,17 +4,30 @@ import { defineConfig } from 'vite';
 import type { Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-const BUNDLE = fileURLToPath(new URL('./dist/onescript.js', import.meta.url));
+/** Бандлы, которые dev-сервер отдаёт из `dist/` по относительной ссылке страницы. */
+const BUNDLES = [
+  {
+    fileName: 'onescript.js',
+    hint: 'pnpm build:browser',
+  },
+  {
+    fileName: 'onescript-debug.js',
+    hint: 'pnpm build:debug-client',
+  },
+] as const;
+
+function bundlePath(fileName: string): string {
+  return fileURLToPath(new URL(`./dist/${fileName}`, import.meta.url));
+}
 
 /**
  * Dev-сервер: примеры подключают движок относительной ссылкой
  * `<script src="onescript.js">` — так они работают и в `pnpm dev`, и на GitHub
  * Pages под префиксом `/OneScriptJS/`. Браузер разрешает её относительно
  * страницы, поэтому для `/examples/hello.html` запрос придёт на
- * `/examples/onescript.js`. Собранный бандл лежит в `dist/`; отдаём его по любому
- * пути, оканчивающемуся на `/onescript.js`, чтобы `pnpm dev` работал без
- * копирования файлов. Требуется предварительный `pnpm build:browser`
- * (при изменении движка — пересобрать и обновить страницу).
+ * `/examples/onescript.js`. Собранные бандлы лежат в `dist/`; отдаём их по любому
+ * пути, оканчивающемуся на имя файла, чтобы `pnpm dev` работал без копирования.
+ * Требуется предварительная сборка (при изменении — пересобрать и обновить страницу).
  */
 function serveBuiltBundle(): Plugin {
   return {
@@ -23,17 +36,53 @@ function serveBuiltBundle(): Plugin {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const url = (req.url ?? '').split('?')[0] ?? '';
-        if (!url.endsWith('/onescript.js')) return next();
-        if (!existsSync(BUNDLE) || !statSync(BUNDLE).isFile()) {
+        const bundle = BUNDLES.find((candidate) => url.endsWith(`/${candidate.fileName}`));
+        if (bundle === undefined) return next();
+        const path = bundlePath(bundle.fileName);
+        if (!existsSync(path) || !statSync(path).isFile()) {
           res.statusCode = 404;
           res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-          res.end('dist/onescript.js не найден. Выполните: pnpm build:browser');
+          res.end(`dist/${bundle.fileName} не найден. Выполните: ${bundle.hint}`);
           return;
         }
         res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');
-        res.end(readFileSync(BUNDLE));
+        res.end(readFileSync(path));
       });
+    },
+  };
+}
+
+/**
+ * Dev-инъекция отладочного клиента: при `OSJS_DEBUG=1` страница получает порт
+ * адаптера и `onescript-debug.js` до старта движка (`body-prepend`), иначе —
+ * ничего. Не собранный клиент не инжектится: страница работает штатно.
+ */
+function injectDebugClient(): Plugin {
+  return {
+    name: 'osjs-debug-injection',
+    apply: 'serve',
+    transformIndexHtml(html) {
+      if (!process.env.OSJS_DEBUG) return html;
+      const bundle = bundlePath('onescript-debug.js');
+      if (!existsSync(bundle)) return html;
+      const configured = Number.parseInt(process.env.OSJS_DEBUG_PORT ?? '', 10);
+      const port = Number.isInteger(configured) && configured > 0 ? configured : 9229;
+      return {
+        html,
+        tags: [
+          {
+            tag: 'script',
+            children: `window.__OSJS_DEBUG_PORT__=${port};`,
+            injectTo: 'body-prepend',
+          },
+          {
+            tag: 'script',
+            attrs: { src: 'onescript-debug.js' },
+            injectTo: 'body-prepend',
+          },
+        ],
+      };
     },
   };
 }
@@ -102,7 +151,7 @@ function demoHttpApi(): Plugin {
 // Браузерная сборка: единый скрипт onescript.js, подключаемый как
 // <script src="onescript.js"></script> и регистрирующий <one-script>.
 export default defineConfig({
-  plugins: [serveBuiltBundle(), demoHttpApi()],
+  plugins: [serveBuiltBundle(), injectDebugClient(), demoHttpApi()],
   build: {
     lib: {
       entry: fileURLToPath(new URL('./src/browser/onescript.ts', import.meta.url)),

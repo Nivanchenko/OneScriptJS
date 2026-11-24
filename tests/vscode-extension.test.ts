@@ -17,6 +17,18 @@ interface ManifestGrammar {
   embeddedLanguages?: Record<string, string>;
 }
 
+interface ManifestDebugger {
+  type?: string;
+  label?: string;
+  languages?: string[];
+  configurationAttributes?: Record<
+    string,
+    { required?: string[]; properties?: Record<string, unknown> }
+  >;
+  initialConfigurations?: Array<Record<string, unknown>>;
+  configurationSnippets?: Array<{ label?: string; body?: Record<string, unknown> }>;
+}
+
 interface Manifest {
   name?: string;
   displayName?: string;
@@ -30,6 +42,8 @@ interface Manifest {
     languages?: Array<{ id?: string; extensions?: string[]; configuration?: string }>;
     grammars?: ManifestGrammar[];
     commands?: Array<{ command?: string; title?: string }>;
+    breakpoints?: Array<{ language?: string }>;
+    debuggers?: ManifestDebugger[];
     configuration?: { properties?: Record<string, Setting> };
   };
 }
@@ -200,5 +214,128 @@ describe('клиент LSP', () => {
     expect(source).toContain('onescriptjs.showOutput');
     expect(source).toContain('setTrace');
     expect(source).toContain('deactivate');
+  });
+});
+
+const debuggers = manifest.contributes?.debuggers ?? [];
+const debuggerManifest = debuggers.find((item) => item.type === 'osjs');
+const launchConfig = debuggerManifest?.configurationAttributes?.launch;
+const attachConfig = debuggerManifest?.configurationAttributes?.attach;
+const debugSource = existsSync(new URL('../extensions/vscode/src/debug.ts', import.meta.url))
+  ? readFileSync(new URL('../extensions/vscode/src/debug.ts', import.meta.url), 'utf8')
+  : '';
+const debugAdapterBuild = existsSync(
+  new URL('../scripts/build-debug-adapter.mjs', import.meta.url),
+)
+  ? readFileSync(new URL('../scripts/build-debug-adapter.mjs', import.meta.url), 'utf8')
+  : '';
+const launchJsonPath = new URL('../.vscode/launch.json', import.meta.url);
+const launchJson = existsSync(launchJsonPath)
+  ? (JSON.parse(readFileSync(launchJsonPath, 'utf8')) as {
+      configurations?: Array<Record<string, unknown>>;
+    })
+  : undefined;
+
+describe('отладчик BSL (DAP)', () => {
+  it('объявляет debugger типа osjs с языками osjs/html', () => {
+    expect(debuggerManifest).toBeDefined();
+    expect(debuggerManifest).toMatchObject({
+      type: 'osjs',
+      label: 'OneScriptJS (BSL)',
+      languages: ['osjs', 'html'],
+    });
+  });
+
+  it('описывает конфигурации launch и attach по контракту', () => {
+    expect(launchConfig?.required).toEqual(['program']);
+    expect(Object.keys(launchConfig?.properties ?? {}).sort()).toEqual([
+      'cwd',
+      'program',
+      'stopOnEntry',
+    ]);
+    expect(attachConfig?.required).toEqual(['url']);
+    expect(Object.keys(attachConfig?.properties ?? {}).sort()).toEqual([
+      'port',
+      'stopOnEntry',
+      'url',
+      'webRoot',
+    ]);
+  });
+
+  it('даёт initialConfigurations и snippets для launch/attach', () => {
+    const initial = debuggerManifest?.initialConfigurations ?? [];
+    expect(initial).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'osjs', request: 'launch', program: '${file}' }),
+        expect.objectContaining({
+          type: 'osjs',
+          request: 'attach',
+          url: 'http://localhost:5173/examples/hello.html',
+          webRoot: '${workspaceFolder}',
+        }),
+      ]),
+    );
+    const snippets = (debuggerManifest?.configurationSnippets ?? []).map(
+      (snippet) => snippet.body?.request,
+    );
+    expect(snippets).toEqual(expect.arrayContaining(['launch', 'attach']));
+  });
+
+  it('регистрирует брейкпоинты для языка osjs', () => {
+    expect(manifest.contributes?.breakpoints).toEqual([{ language: 'osjs' }]);
+  });
+
+  it('активируется по отладочным событиям', () => {
+    expect(manifest.activationEvents).toEqual(
+      expect.arrayContaining(['onDebugResolve:osjs', 'onDebugInitialConfigurations']),
+    );
+  });
+
+  it('фабрика запускает out/debug-adapter.js на Node-рантайме VS Code', () => {
+    expect(debugSource).toContain('DebugAdapterExecutable');
+    expect(debugSource).toContain('out/debug-adapter.js');
+    expect(debugSource).toContain('process.execPath');
+    expect(debugSource).toContain('ELECTRON_RUN_AS_NODE');
+    expect(debugSource).toContain("registerDebugAdapterDescriptorFactory('osjs'");
+    const extensionSource = readFileSync(
+      new URL('../extensions/vscode/src/extension.ts', import.meta.url),
+      'utf8',
+    );
+    expect(extensionSource).toContain('registerDebug(context)');
+  });
+
+  it('сборщик расширения бандлит адаптер в out/debug-adapter.js', () => {
+    expect(readFileSync(new URL('../scripts/build-vscode-extension.mjs', import.meta.url), 'utf8')).toContain(
+      'src/node/debug-adapter.ts',
+    );
+    expect(readFileSync(new URL('../scripts/build-vscode-extension.mjs', import.meta.url), 'utf8')).toContain(
+      'out/debug-adapter.js',
+    );
+    expect(readFileSync(new URL('../scripts/build-vscode-extension.mjs', import.meta.url), 'utf8')).toContain(
+      'bufferutil',
+    );
+  });
+
+  it('build:debug-adapter собирает dist/debug/adapter.cjs', () => {
+    expect(root.scripts?.['build:debug-adapter']).toBe('node scripts/build-debug-adapter.mjs');
+    expect(debugAdapterBuild).toContain('dist/debug/adapter.cjs');
+    expect(debugAdapterBuild).toContain("format: 'cjs'");
+    expect(debugAdapterBuild).toContain('bufferutil');
+    expect(debugAdapterBuild).toContain('utf-8-validate');
+  });
+
+  it('.vscode/launch.json содержит конфигурации osjs launch и attach', () => {
+    const configurations = launchJson?.configurations ?? [];
+    expect(configurations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'osjs', request: 'launch', program: '${file}' }),
+        expect.objectContaining({
+          type: 'osjs',
+          request: 'attach',
+          url: 'http://localhost:5173/examples/hello.html',
+          webRoot: '${workspaceFolder}',
+        }),
+      ]),
+    );
   });
 });
