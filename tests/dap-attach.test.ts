@@ -674,3 +674,80 @@ describe('DAP attach: inline HTML-блоки (W5)', () => {
     }
   });
 });
+
+describe('DAP attach: импортированные модули', () => {
+  let root: string;
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  const MODULE_SOURCE = [
+    'Перем Поле Экспорт;', // 1
+    '', // 2
+    'Функция Сложить(А, Б) Экспорт', // 3
+    '  Возврат А + Б;', // 4
+    'КонецФункции', // 5
+  ].join('\n');
+
+  function prepare(): { webRoot: string; modulePath: string; pageUrl: string } {
+    root = mkdtempSync(join(tmpdir(), 'osjs-dap-modules-'));
+    mkdirSync(join(root, 'examples', 'lib'), { recursive: true });
+    writeFileSync(join(root, 'examples', 'modules.html'), '<html><body></body></html>');
+    const modulePath = join(root, 'examples', 'lib', 'Модуль.osjs');
+    writeFileSync(modulePath, MODULE_SOURCE);
+    return {
+      webRoot: root,
+      modulePath,
+      pageUrl: 'http://localhost:5173/examples/modules.html',
+    };
+  }
+
+  it('брейкпоинт в модуле уходит с URL движка, кадр модуля открывает файл', async () => {
+    const { webRoot, modulePath, pageUrl } = prepare();
+    const harness = connect();
+    const { client, session } = harness;
+    const transport = session.transport;
+    try {
+      await expectSuccess(await client.sendRequest('initialize', INITIALIZE_ARGS));
+      await expectSuccess(await client.sendRequest('attach', { url: pageUrl, webRoot }));
+      transport.deliver({ type: 'hello', v: 1, pageUrl, baseURI: pageUrl, blocks: [] });
+      await client.waitForEvent('initialized');
+
+      // Движок для импорта из inline-блока резолвит путь от страницы.
+      const engineUrl = new URL('lib/Модуль.osjs', pageUrl).href;
+      const response = expectSuccess(
+        await client.sendRequest('setBreakpoints', {
+          source: { path: modulePath },
+          breakpoints: [{ line: 4 }],
+        }),
+      );
+      expect(
+        body<{ breakpoints: Array<{ verified: boolean; line?: number }> }>(response).breakpoints,
+      ).toEqual([expect.objectContaining({ verified: true, line: 4 })]);
+      expect(transport.last('breakpoints')).toMatchObject({
+        sourceId: engineUrl,
+        replace: true,
+        items: [{ line: 4 }],
+      });
+
+      transport.deliver({
+        type: 'stopped',
+        threadId: 1,
+        reason: 'breakpoint',
+        frames: [{ id: 1, method: 'Сложить', sourceId: engineUrl, line: 4 }],
+      });
+      await client.waitForEvent('stopped');
+
+      const stack = body<{ stackFrames: Array<{ source?: { path?: string; name?: string } }> }>(
+        expectSuccess(await client.sendRequest('stackTrace', { threadId: 1 })),
+      );
+      expect(stack.stackFrames[0]!.source).toMatchObject({
+        name: 'Модуль.osjs',
+        path: modulePath,
+      });
+    } finally {
+      harness.dispose();
+    }
+  });
+});
