@@ -28,6 +28,13 @@
       "name": "OneScriptJS: браузер modules app",
       "url": "http://localhost:5173/examples/modules.html",
       "webRoot": "${workspaceFolder}"
+    },
+    {
+      "type": "osjs",
+      "request": "attach",
+      "name": "OneScriptJS: браузер external app",
+      "url": "http://localhost:5173/examples/external.html",
+      "webRoot": "${workspaceFolder}"
     }
   ]
 }
